@@ -12,6 +12,9 @@ vectordb/
 # Model weights (large files, downloaded on first run)
 model-weights/
 
+# Download artifacts (built locally)
+downloads/
+
 # OS files
 .DS_Store
 Thumbs.db

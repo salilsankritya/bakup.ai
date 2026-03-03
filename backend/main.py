@@ -92,12 +92,14 @@ from api.routes.index      import router as index_router
 from api.routes.query      import router as query_router
 from api.routes.llm_config import router as llm_router
 from api.routes.debug      import router as debug_router
+from api.routes.download   import router as download_router
 
 app.include_router(health_router)
 app.include_router(index_router)
 app.include_router(query_router)
 app.include_router(llm_router)
 app.include_router(debug_router)
+app.include_router(download_router)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

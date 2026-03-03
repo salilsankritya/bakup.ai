@@ -16,7 +16,7 @@
       <a class="nav__brand" href="/">bakup.ai</a>
       <nav class="nav__links">
         <a href="#how-it-works">Docs</a>
-        <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/salilsankritya/bakup.ai" target="_blank" rel="noopener">GitHub</a>
         <a href="#preview" class="btn btn--outline">Request Access</a>
       </nav>
     </div>
@@ -256,16 +256,16 @@
             <a
               class="btn btn--primary gate__download"
               id="download-link"
-              href="#"
-              download
+              href="downloads/bakup-preview-0.1.0.zip"
+              download="bakup-preview-0.1.0.zip"
             >
-              Download for macOS / Linux
+              Download Developer Preview
             </a>
             <div class="gate__checksum" id="gate-checksum">
               <span class="gate__checksum-label">SHA-256</span>
               <code class="gate__checksum-value" id="checksum-value"></code>
             </div>
-            <p class="gate__platform-note">Windows support in progress.</p>
+            <p class="gate__platform-note">Runs on Windows, macOS, and Linux.</p>
           </div>
 
           <!-- Security disclaimer -->
@@ -300,7 +300,7 @@
                 <span class="code-block__dot"></span>
               </div>
               <pre class="code-block__pre"><code><span class="code-comment"># Unzip the archive</span>
-unzip bakup-developer-preview.zip &amp;&amp; cd bakup
+unzip bakup-preview-0.1.0.zip &amp;&amp; cd bakup
 <span class="code-comment"># Configure — set BAKUP_PROJECT_PATH to your project directory</span>
 cp .env.example .env<span class="cursor">▌</span></code></pre>
             </div>
@@ -359,8 +359,43 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
 
       <p class="quickstart__docs">
         Full documentation and known limitations →
-        <a href="https://docs.bakup.ai" target="_blank" rel="noopener">docs.bakup.ai</a>
+        <a href="https://github.com/salilsankritya/bakup.ai#readme" target="_blank" rel="noopener">github.com/salilsankritya/bakup.ai</a>
       </p>
+    </div>
+  </section>
+
+  <!-- ─── CHANGELOG ──────────────────────────────────────────────────────────── -->
+  <section class="section" id="changelog">
+    <div class="container container--narrow">
+      <h2 class="section__title">Changelog</h2>
+
+      <div class="changelog__entry">
+        <h3 class="changelog__version">v0.1.0 <span class="changelog__date">— March 2026 · Developer Preview</span></h3>
+        <ul class="changelog__list">
+          <li>Recursive log folder ingestion — walks subdirectories, indexes <code>.log</code> and <code>.out</code> files individually.</li>
+          <li>Cross-file error aggregation — correlates errors across multiple log files and reports distribution.</li>
+          <li>Severity-aware analysis — auto-tags each log entry as <code>error</code>, <code>warning</code>, or <code>info</code> at ingestion.</li>
+          <li>Multi-factor confidence scoring — weighs similarity, severity, recency, error volume, pattern consistency, and cross-file corroboration.</li>
+          <li>Structured summaries with file references and line numbers.</li>
+          <li>Local-first architecture — zero outbound network calls during analysis.</li>
+          <li>Docker Compose one-command startup.</li>
+          <li>Browser-based UI with SSE streaming responses.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── PRIVACY ──────────────────────────────────────────────────────────── -->
+  <section class="section" id="privacy">
+    <div class="container container--narrow">
+      <h2 class="section__title">Privacy</h2>
+      <div class="privacy__content">
+        <p><strong>No data leaves your machine.</strong> Bakup processes your codebase and logs entirely on local hardware. There are no outbound network calls during analysis, no telemetry, and no crash reporting.</p>
+        <p><strong>No tracking.</strong> We do not collect information about what projects you analyze, what questions you ask, or how you use the tool. There is no analytics pipeline to receive such data.</p>
+        <p><strong>Access keys</strong> are used solely to gate distribution of the developer preview. They are validated client-side via SHA-256 hashing. We do not log key usage or tie keys to analytics.</p>
+        <p><strong>Read-only access.</strong> Bakup requests read permissions only. It cannot create, modify, or delete files on your filesystem.</p>
+        <p><strong>Future cloud mode.</strong> A managed cloud option is on the roadmap for team collaboration. It will operate under a separate privacy policy with explicit opt-in. Local-first will remain the default.</p>
+      </div>
     </div>
   </section>
 
@@ -370,9 +405,9 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
       <span class="footer__brand">bakup.ai &nbsp;© 2026</span>
       <nav class="footer__links">
         <a href="#quickstart">Docs</a>
-        <a href="#">Changelog</a>
-        <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
-        <a href="#">Privacy</a>
+        <a href="#changelog">Changelog</a>
+        <a href="https://github.com/salilsankritya/bakup.ai" target="_blank" rel="noopener">GitHub</a>
+        <a href="#privacy">Privacy</a>
       </nav>
       <span class="footer__tagline">Built for engineers. Runs on your hardware.</span>
     </div>
