@@ -20,7 +20,7 @@ from core.ingestion.chunker import Chunk, chunk_file
 from core.ingestion.log_parser import parse_log_file
 
 # Extensions that are treated as log files and parsed with the log parser
-LOG_EXTENSIONS: frozenset = frozenset({".log"})
+LOG_EXTENSIONS: frozenset = frozenset({".log", ".out"})
 
 # Directories to skip entirely — generated, vendored, or irrelevant
 SKIP_DIRS: frozenset = frozenset({
@@ -48,7 +48,7 @@ TEXT_EXTENSIONS: frozenset = frozenset({
     # Web
     ".html", ".css", ".scss",
     # Logs
-    ".log",
+    ".log", ".out",
 })
 
 # Hard limit: skip files larger than this (bytes)

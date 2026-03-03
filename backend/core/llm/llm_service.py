@@ -218,6 +218,7 @@ class LLMService:
         trend_summary: str = "",
         cluster_summary: str = "",
         confidence_summary: str = "",
+        file_aggregation_summary: str = "",
     ) -> LLMResponse:
         """
         Summarise errors/issues found in log chunks.
@@ -227,8 +228,8 @@ class LLMService:
         "No similar incident found", we pass the entries to the LLM and let
         it summarise whether any errors exist.
 
-        When trend/cluster/confidence summaries are provided, they are
-        injected into the context so the LLM can reference them.
+        When trend/cluster/confidence/file-aggregation summaries are provided,
+        they are injected into the context so the LLM can reference them.
 
         Falls back to an extractive display of log entries when the LLM is
         not configured.
@@ -247,6 +248,7 @@ class LLMService:
             trend_summary=trend_summary,
             cluster_summary=cluster_summary,
             confidence_summary=confidence_summary,
+            file_aggregation_summary=file_aggregation_summary,
             max_chars=_MAX_CHUNK_CHARS,
         )
         user_msg = f"Context (log entries + analysis):\n\n{context}\n\nQuestion: {question}"

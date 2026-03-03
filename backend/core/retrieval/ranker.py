@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from core.retrieval.models import RetrievedChunk
 
@@ -46,6 +46,9 @@ class RankedResult:
     source_type: str           # "code" | "log"
     confidence: float          # [0.0, 1.0] — higher is more relevant
     confidence_label: str      # "high" | "medium" | "low"
+    file_name: str = ""
+    severity: str = "info"
+    detected_timestamp: Optional[str] = None
 
 
 def distance_to_confidence(distance: float) -> float:
@@ -77,6 +80,9 @@ def rank_results(chunks: List[RetrievedChunk]) -> List[RankedResult]:
             source_type=c.source_type,
             confidence=distance_to_confidence(c.distance),
             confidence_label=_label(distance_to_confidence(c.distance)),
+            file_name=getattr(c, 'file_name', '') or '',
+            severity=getattr(c, 'severity', 'info') or 'info',
+            detected_timestamp=getattr(c, 'detected_timestamp', None),
         )
         for c in chunks
     ]

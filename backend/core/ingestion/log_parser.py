@@ -10,13 +10,21 @@ Supports:
 
 Each logical log entry (one timestamp-bounded event) becomes one chunk.
 Entries longer than MAX_LOG_ENTRY_LINES are truncated at that boundary.
+
+Metadata enrichment (v2):
+  - severity:           "error" | "warning" | "info"
+  - detected_timestamp: first timestamp found in the chunk
+  - file_name:          basename of the log file
+  - last_modified:      ISO 8601 mtime of the file on disk
 """
 
 from __future__ import annotations
 
+import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, List
+from typing import List, Optional
 
 from core.ingestion.chunker import Chunk, CHUNK_LINES, MIN_CHUNK_CHARS
 
@@ -34,12 +42,70 @@ _TIMESTAMP_PATTERNS: List[re.Pattern] = [
 
 MAX_LOG_ENTRY_LINES: int = 80  # Guard against runaway stack traces
 
+# ── Severity detection ─────────────────────────────────────────────────────────
+
+_ERROR_INDICATORS = re.compile(
+    r"\bERROR\b|\bException\b|\bTraceback\b|\bFailed\b|\bCritical\b|\bFatal\b|\bFATAL\b|\bCRITICAL\b",
+    re.IGNORECASE,
+)
+_WARNING_INDICATORS = re.compile(
+    r"\bWARN(?:ING)?\b",
+    re.IGNORECASE,
+)
+
+# ── Timestamp extraction ──────────────────────────────────────────────────────
+
+_TS_EXTRACT = [
+    re.compile(r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})"),
+    re.compile(r"\[(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})\]"),
+]
+
+
+def _detect_severity(text: str) -> str:
+    """Detect severity from chunk text. error > warning > info."""
+    if _ERROR_INDICATORS.search(text):
+        return "error"
+    if _WARNING_INDICATORS.search(text):
+        return "warning"
+    return "info"
+
+
+def _extract_first_timestamp(text: str) -> Optional[str]:
+    """Extract the first parseable timestamp from chunk text as ISO string."""
+    first_line = text.split("\n")[0]
+    for pat in _TS_EXTRACT:
+        m = pat.search(first_line)
+        if m:
+            raw = m.group(1).replace("T", " ")
+            try:
+                dt = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
+                return dt.replace(tzinfo=timezone.utc).isoformat()
+            except ValueError:
+                continue
+    return None
+
+
+def _get_file_mtime_iso(filepath: Path) -> Optional[str]:
+    """Return the file's last-modified time as ISO 8601 string."""
+    try:
+        mtime = os.path.getmtime(filepath)
+        return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+    except OSError:
+        return None
+
 
 def _starts_new_entry(line: str) -> bool:
     return any(p.match(line) for p in _TIMESTAMP_PATTERNS)
 
 
-def _make_chunk(lines: List[str], source_file: str, start_line: int) -> Chunk | None:
+def _make_chunk(
+    lines: List[str],
+    source_file: str,
+    start_line: int,
+    *,
+    file_name: str = "",
+    last_modified: Optional[str] = None,
+) -> Chunk | None:
     text = "\n".join(lines).strip()
     if len(text) < MIN_CHUNK_CHARS:
         return None
@@ -49,12 +115,16 @@ def _make_chunk(lines: List[str], source_file: str, start_line: int) -> Chunk | 
         line_start=start_line,
         line_end=start_line + len(lines) - 1,
         source_type="log",
+        file_name=file_name,
+        last_modified=last_modified,
+        detected_timestamp=_extract_first_timestamp(text),
+        severity=_detect_severity(text),
     )
 
 
 def parse_log_file(filepath: Path, project_root: Path) -> List[Chunk]:
     """
-    Parse a log file into per-entry chunks.
+    Parse a log file into per-entry chunks with severity and metadata.
     Falls back to line-window chunking if no timestamp structure is detected.
     Never loads more than one entry into memory at a time.
     """
@@ -62,6 +132,9 @@ def parse_log_file(filepath: Path, project_root: Path) -> List[Chunk]:
         relative = str(filepath.relative_to(project_root))
     except ValueError:
         relative = filepath.name
+
+    fname = filepath.name
+    mtime = _get_file_mtime_iso(filepath)
 
     chunks: List[Chunk] = []
     current_entry: List[str] = []
@@ -76,7 +149,10 @@ def parse_log_file(filepath: Path, project_root: Path) -> List[Chunk]:
                 if _starts_new_entry(line):
                     # Flush previous entry
                     if current_entry:
-                        chunk = _make_chunk(current_entry, relative, current_start)
+                        chunk = _make_chunk(
+                            current_entry, relative, current_start,
+                            file_name=fname, last_modified=mtime,
+                        )
                         if chunk:
                             chunks.append(chunk)
                     current_entry = [line]
@@ -86,7 +162,10 @@ def parse_log_file(filepath: Path, project_root: Path) -> List[Chunk]:
                     current_entry.append(line)
                     # Guard against unbounded entries (e.g. huge stack traces)
                     if len(current_entry) >= MAX_LOG_ENTRY_LINES:
-                        chunk = _make_chunk(current_entry, relative, current_start)
+                        chunk = _make_chunk(
+                            current_entry, relative, current_start,
+                            file_name=fname, last_modified=mtime,
+                        )
                         if chunk:
                             chunks.append(chunk)
                         current_entry = []
@@ -94,7 +173,10 @@ def parse_log_file(filepath: Path, project_root: Path) -> List[Chunk]:
 
             # Flush final entry
             if current_entry:
-                chunk = _make_chunk(current_entry, relative, current_start)
+                chunk = _make_chunk(
+                    current_entry, relative, current_start,
+                    file_name=fname, last_modified=mtime,
+                )
                 if chunk:
                     chunks.append(chunk)
 
@@ -111,11 +193,29 @@ def parse_log_file(filepath: Path, project_root: Path) -> List[Chunk]:
 
 
 def _fallback_chunk(filepath: Path, relative: str) -> List[Chunk]:
-    """Line-window fallback for unstructured logs."""
+    """Line-window fallback for unstructured logs with metadata enrichment."""
     from core.ingestion.chunker import chunk_file
-    # Re-use generic chunker
+
+    fname = filepath.name
+    mtime = _get_file_mtime_iso(filepath)
+
     try:
         root = filepath.parent
-        return chunk_file(filepath, root, source_type="log")
+        raw_chunks = chunk_file(filepath, root, source_type="log")
+        # Enrich with metadata (Chunk is frozen, so rebuild)
+        enriched: List[Chunk] = []
+        for c in raw_chunks:
+            enriched.append(Chunk(
+                text=c.text,
+                source_file=c.source_file,
+                line_start=c.line_start,
+                line_end=c.line_end,
+                source_type=c.source_type,
+                file_name=fname,
+                last_modified=mtime,
+                detected_timestamp=_extract_first_timestamp(c.text),
+                severity=_detect_severity(c.text),
+            ))
+        return enriched
     except Exception:
         return []

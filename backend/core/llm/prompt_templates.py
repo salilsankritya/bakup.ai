@@ -113,6 +113,11 @@ SYSTEM_LOG_SUMMARY = textwrap.dedent("""\
     - Correlations (e.g., deployment followed by errors, cascade failures)
     - If automated trend/cluster data is provided below, incorporate it.
 
+    ### Error Distribution (if multi-file data is provided)
+    - Show which files contribute the most errors, ranked by count.
+    - Highlight the dominant error source if one file stands out.
+    - If only one file is involved, skip this section.
+
     ## Rules
     1. Only report what is ACTUALLY in the provided log entries and analysis.
        Never fabricate file names, line numbers, error messages, or timestamps.
@@ -200,13 +205,14 @@ def build_log_analysis_context(
     trend_summary: str = "",
     cluster_summary: str = "",
     confidence_summary: str = "",
+    file_aggregation_summary: str = "",
     max_chars: int = 800,
 ) -> str:
     """
     Build an enriched context block for log summarisation.
 
     Includes the standard chunk context PLUS automated analysis sections
-    (trends, clusters, confidence) when available.
+    (trends, clusters, confidence, file aggregation) when available.
     """
     parts = [build_context_block(chunks, max_chars=max_chars)]
 
@@ -215,6 +221,8 @@ def build_log_analysis_context(
         analysis_sections.append(f"## Automated Trend Analysis\n{trend_summary}")
     if cluster_summary:
         analysis_sections.append(f"## Automated Cluster Analysis\n{cluster_summary}")
+    if file_aggregation_summary:
+        analysis_sections.append(f"## File-Level Error Distribution\n{file_aggregation_summary}")
     if confidence_summary:
         analysis_sections.append(f"## Confidence Assessment\n{confidence_summary}")
 

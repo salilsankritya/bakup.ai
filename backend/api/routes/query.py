@@ -278,22 +278,31 @@ async def ask_stream(body: QueryRequest):
             # ── Step 5: Keyword search for log queries ────────────────────────
             from core.retrieval.rag import _is_log_query, _extract_search_keywords
             kw_chunks = []
+            sev_chunks = []
 
             if _is_log_query(body.question):
                 keywords = _extract_search_keywords(body.question)
                 if keywords:
                     yield sse_step("keyword_search",
                                    f"Enhancing with keyword search: {', '.join(keywords[:5])}")
-                    from core.retrieval.vector_store import keyword_search
+                    from core.retrieval.vector_store import keyword_search, severity_search
                     kw_chunks = await loop.run_in_executor(
                         None, partial(keyword_search, body.namespace, keywords, top_k)
                     )
                     yield sse_step("keyword_done",
                                    f"Found {len(kw_chunks)} keyword matches")
 
+                # Pull error-severity chunks for cross-file distribution
+                from core.retrieval.vector_store import severity_search
+                yield sse_step("severity_search", "Searching for error-severity chunks...")
+                sev_chunks = await loop.run_in_executor(
+                    None, partial(severity_search, body.namespace, "error", top_k * 2)
+                )
+                yield sse_step("severity_done", f"Found {len(sev_chunks)} error chunks")
+
             # ── Step 6: Merge & rank ──────────────────────────────────────────
             yield sse_step("rank", "Ranking results by relevance...")
-            all_chunks = raw + kw_chunks
+            all_chunks = raw + kw_chunks + sev_chunks
             seen = set()
             deduped = []
             for c in all_chunks:
@@ -344,6 +353,14 @@ async def ask_stream(body: QueryRequest):
                     yield sse_step("confidence_done",
                         f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})")
 
+                    # File aggregation
+                    from core.analysis.file_aggregation import aggregate_by_file
+                    yield sse_step("file_aggregation", "Aggregating errors across files...")
+                    agg_report = await loop.run_in_executor(
+                        None, aggregate_by_file, relevant)
+                    yield sse_step("file_aggregation_done",
+                        f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s)")
+
                     yield sse_step("generate", f"Generating structured log analysis from {len(relevant)} sources...")
                     svc = get_llm_service()
                     llm_resp = await loop.run_in_executor(
@@ -352,6 +369,7 @@ async def ask_stream(body: QueryRequest):
                             trend_report.summary_text(),
                             cluster_report.summary_text(),
                             conf_result.reasoning,
+                            agg_report.summary_text,
                         )
                     )
                     yield sse_step("generate_done", f"Log analysis ready ({llm_resp.mode})")
@@ -408,6 +426,14 @@ async def ask_stream(body: QueryRequest):
                 yield sse_step("confidence_done",
                     f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})")
 
+                # File aggregation
+                from core.analysis.file_aggregation import aggregate_by_file
+                yield sse_step("file_aggregation", "Aggregating errors across files...")
+                agg_report = await loop.run_in_executor(
+                    None, aggregate_by_file, analysis_chunks)
+                yield sse_step("file_aggregation_done",
+                    f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s)")
+
                 yield sse_step("log_summarize", "Summarising log entries for errors...")
                 svc = get_llm_service()
                 llm_resp = await loop.run_in_executor(
@@ -416,6 +442,7 @@ async def ask_stream(body: QueryRequest):
                         trend_report.summary_text(),
                         cluster_report.summary_text(),
                         conf_result.reasoning,
+                        agg_report.summary_text,
                     )
                 )
                 yield sse_step("log_summarize_done", "Log summary ready")

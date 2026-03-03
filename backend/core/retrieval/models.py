@@ -8,6 +8,7 @@ No external dependencies — safe to import anywhere.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -19,3 +20,6 @@ class RetrievedChunk:
     line_end: int
     source_type: str    # "code" | "log"
     distance: float     # cosine distance: 0 = identical, 1 = orthogonal
+    file_name: str = ""
+    severity: str = "info"  # "error" | "warning" | "info"
+    detected_timestamp: Optional[str] = None

@@ -15,9 +15,9 @@ exact line references to every answer without a tokenizer dependency.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 CHUNK_LINES: int = 40     # Lines per chunk
 OVERLAP_LINES: int = 8    # Lines shared between adjacent chunks
@@ -32,6 +32,11 @@ class Chunk:
     line_start: int     # 1-based
     line_end: int       # 1-based inclusive
     source_type: str    # "code" | "log"
+    # ── Extended metadata (populated during log ingestion) ────────────
+    file_name: str = ""               # basename of the source file
+    last_modified: Optional[str] = None  # ISO 8601 mtime of file on disk
+    detected_timestamp: Optional[str] = None  # first timestamp found in chunk
+    severity: str = "info"            # "error" | "warning" | "info"
 
 
 def chunk_text(

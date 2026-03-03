@@ -29,11 +29,24 @@ services:
       - type: bind
         source: ./model-weights
         target: /app/model-weights
+      # Local projects — mount host directories here for /index endpoint.
+      # Place your project folders inside ./projects/ on the host.
+      - type: bind
+        source: ./projects
+        target: /app/projects
+        read_only: true
+      # Logs — mount host log directories here for log ingestion.
+      - type: bind
+        source: ./logs
+        target: /app/logs
+        read_only: true
     environment:
       BAKUP_HOST: "0.0.0.0"
       BAKUP_PORT: "8000"
       BAKUP_CHROMA_DIR: "/app/vectordb"
       BAKUP_MODEL_CACHE_DIR: "/app/model-weights"
+      # Restrict local path indexing to mounted volumes only (Docker safety).
+      BAKUP_DOCKER_VOLUMES: "/app/projects,/app/logs"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]

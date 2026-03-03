@@ -103,12 +103,19 @@ def add_chunks(
 
             ids.append(chunk_id)
             docs.append(chunk.text)
-            metas.append({
+            meta_dict = {
                 "source_file": chunk.source_file,
                 "line_start":  chunk.line_start,
                 "line_end":    chunk.line_end,
                 "source_type": chunk.source_type,
-            })
+                "file_name":   chunk.file_name or "",
+                "severity":    chunk.severity or "info",
+            }
+            if chunk.detected_timestamp:
+                meta_dict["detected_timestamp"] = chunk.detected_timestamp
+            if chunk.last_modified:
+                meta_dict["last_modified"] = chunk.last_modified
+            metas.append(meta_dict)
             vecs.append(vec)
 
         collection.upsert(
@@ -170,6 +177,9 @@ def query_chunks(
             line_end=int(meta.get("line_end", 0)),
             source_type=meta.get("source_type", "code"),
             distance=float(dist),
+            file_name=meta.get("file_name", ""),
+            severity=meta.get("severity", "info"),
+            detected_timestamp=meta.get("detected_timestamp"),
         ))
 
     return chunks
@@ -271,9 +281,54 @@ def keyword_search(
                 line_end=int(meta.get("line_end", 0)),
                 source_type=meta.get("source_type", "code"),
                 distance=0.30,
+                file_name=meta.get("file_name", ""),
+                severity=meta.get("severity", "info"),
+                detected_timestamp=meta.get("detected_timestamp"),
             ))
 
     return chunks[:top_k]
+
+
+def severity_search(
+    namespace: str,
+    severity: str = "error",
+    top_k: int = 20,
+) -> List[RetrievedChunk]:
+    """
+    Retrieve all chunks with a given severity tag from the collection.
+    Useful for building cross-file error distribution reports.
+    """
+    collection = _get_or_create_collection(namespace)
+    if collection.count() == 0:
+        return []
+
+    try:
+        results = collection.get(
+            where={"severity": severity},
+            include=["documents", "metadatas"],
+            limit=top_k,
+        )
+    except Exception:
+        return []
+
+    if not results or not results.get("ids"):
+        return []
+
+    chunks: List[RetrievedChunk] = []
+    for doc, meta in zip(results["documents"], results["metadatas"]):
+        chunks.append(RetrievedChunk(
+            text=doc,
+            source_file=meta.get("source_file", "unknown"),
+            line_start=int(meta.get("line_start", 0)),
+            line_end=int(meta.get("line_end", 0)),
+            source_type=meta.get("source_type", "code"),
+            distance=0.20,  # Severity match = high relevance
+            file_name=meta.get("file_name", ""),
+            severity=meta.get("severity", "info"),
+            detected_timestamp=meta.get("detected_timestamp"),
+        ))
+
+    return chunks
 
 
 # ── Startup initialisation ─────────────────────────────────────────────────────

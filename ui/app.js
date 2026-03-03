@@ -631,7 +631,7 @@ chatInput.addEventListener('input', () => {
 });
 
 chatInput.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     if (!sendBtn.disabled) sendMessage(chatInput.value);
   }
@@ -726,15 +726,24 @@ folderPicker.addEventListener('change', e => {
   const files = e.target.files;
   if (!files || !files.length) return;
   const first = files[0];
-  if (first.path) {
-    // Non-standard .path available in local Chromium builds
-    const sep = first.path.includes('\\\\') ? '\\\\' : first.path.includes('\\') ? '\\' : '/';
-    const parts = first.path.split(sep);
-    parts.pop(); // remove filename to get folder path
-    iPath.value = parts.join(sep);
-  } else {
-    // Fallback: use the top-level folder name from webkitRelativePath
-    iPath.value = first.webkitRelativePath.split('/')[0];
+  if (first.path && first.path.length > 0) {
+    // Electron / local Chromium: .path gives the full absolute path
+    const fullPath = first.path;
+    // Strip the filename to get the parent directory
+    const sepIdx = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+    iPath.value = sepIdx > 0 ? fullPath.substring(0, sepIdx) : fullPath;
+  } else if (first.webkitRelativePath) {
+    // Standard browser fallback — webkitRelativePath only gives relative paths
+    // (e.g. "my-folder/file.txt"), NOT the full absolute path.
+    // Pre-fill the folder name and alert the user to type the full path.
+    const folderName = first.webkitRelativePath.split('/')[0];
+    iPath.value = folderName;
+    iPath.focus();
+    iPath.setSelectionRange(0, folderName.length);
+    showIndexError(
+      'Browser cannot detect the full folder path. ' +
+      'Please type the complete absolute path (e.g. C:\\projects\\' + folderName + ').'
+    );
   }
   folderPicker.value = '';
 });
@@ -742,7 +751,19 @@ folderPicker.addEventListener('change', e => {
 filePicker.addEventListener('change', e => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
-  iLog.value = file.path || file.name;
+  if (file.path && file.path.length > 0) {
+    // Electron / local Chromium: full absolute path available
+    iLog.value = file.path;
+  } else {
+    // Standard browser: only filename available — user must type full path
+    iLog.value = file.name;
+    iLog.focus();
+    iLog.setSelectionRange(0, file.name.length);
+    showIndexError(
+      'Browser cannot detect the full file path. ' +
+      'Please type the complete absolute path to the log file.'
+    );
+  }
   filePicker.value = '';
 });
 

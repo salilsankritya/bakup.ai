@@ -232,33 +232,58 @@ def calculate_confidence(
     else:
         pattern_factor = 0.2
 
+    # ── Factor 6: Cross-file consistency ──────────────────────────────────────
+    # Errors appearing across multiple files indicate a systemic issue
+    unique_files: set = set()
+    for chunk in retrieved_chunks:
+        fname = getattr(chunk, "file_name", "") or ""
+        src = getattr(chunk, "source_file", "") or ""
+        key = fname or src.split("/")[-1].split("\\")[-1]
+        if key:
+            unique_files.add(key)
+
+    n_files = len(unique_files)
+    if n_files >= 4:
+        cross_file_factor = 1.0
+    elif n_files >= 3:
+        cross_file_factor = 0.85
+    elif n_files >= 2:
+        cross_file_factor = 0.65
+    elif n_files == 1:
+        cross_file_factor = 0.40
+    else:
+        cross_file_factor = 0.20
+
     # ── Composite score ───────────────────────────────────────────────────────
     # Weights vary by query type
     if query_type == "broad":
-        # Broad queries care more about volume and patterns than exact similarity
+        # Broad queries care more about volume, patterns, and cross-file spread
         weights = {
-            "similarity": 0.20,
-            "volume":     0.25,
-            "severity":   0.25,
-            "recency":    0.15,
-            "pattern":    0.15,
+            "similarity":  0.15,
+            "volume":      0.20,
+            "severity":    0.20,
+            "recency":     0.10,
+            "pattern":     0.15,
+            "cross_file":  0.20,
         }
     else:
         # Specific queries weight similarity highest
         weights = {
-            "similarity": 0.40,
-            "volume":     0.15,
-            "severity":   0.20,
-            "recency":    0.10,
-            "pattern":    0.15,
+            "similarity":  0.35,
+            "volume":      0.12,
+            "severity":    0.18,
+            "recency":     0.10,
+            "pattern":     0.12,
+            "cross_file":  0.13,
         }
 
     composite = (
-        weights["similarity"] * similarity_factor
-        + weights["volume"]   * volume_factor
-        + weights["severity"] * severity_factor
-        + weights["recency"]  * recency_factor
-        + weights["pattern"]  * pattern_factor
+        weights["similarity"]  * similarity_factor
+        + weights["volume"]    * volume_factor
+        + weights["severity"]  * severity_factor
+        + weights["recency"]   * recency_factor
+        + weights["pattern"]   * pattern_factor
+        + weights["cross_file"] * cross_file_factor
     )
     composite = round(max(0.0, min(1.0, composite)), 4)
 
@@ -287,18 +312,23 @@ def calculate_confidence(
     if pattern_factor >= 0.75:
         parts.append("consistent error pattern detected")
 
+    if n_files >= 2:
+        parts.append(f"errors span {n_files} file(s)")
+
     parts.append(f"top similarity {top_similarity:.0%}, avg {avg_similarity:.0%}")
     parts.append(f"query type: {query_type}")
 
     reasoning = "; ".join(parts) + f". Composite score: {composite:.2f} → {level}."
 
     factors = {
-        "similarity": round(similarity_factor, 4),
-        "volume":     round(volume_factor, 4),
-        "severity":   round(severity_factor, 4),
-        "recency":    round(recency_factor, 4),
-        "pattern":    round(pattern_factor, 4),
-        "weights":    weights,
+        "similarity":  round(similarity_factor, 4),
+        "volume":      round(volume_factor, 4),
+        "severity":    round(severity_factor, 4),
+        "recency":     round(recency_factor, 4),
+        "pattern":     round(pattern_factor, 4),
+        "cross_file":  round(cross_file_factor, 4),
+        "unique_files": n_files,
+        "weights":     weights,
     }
 
     return ConfidenceResult(

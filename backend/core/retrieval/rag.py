@@ -63,10 +63,11 @@ from core.classifier.query_classifier import (
 )
 from core.embeddings.embedder import embed_query
 from core.retrieval.ranker import RankedResult, has_relevant_results, rank_results, top_relevant
-from core.retrieval.vector_store import query_chunks, keyword_search, collection_count
+from core.retrieval.vector_store import query_chunks, keyword_search, collection_count, severity_search
 from core.analysis.confidence import calculate_confidence, is_broad_query
 from core.analysis.trends import analyze_error_trends
 from core.analysis.clusters import cluster_log_events
+from core.analysis.file_aggregation import aggregate_by_file
 
 # Signal the LLM must produce when it cannot answer from context
 _NO_ANSWER_SIGNAL = "NO_ANSWER"
@@ -272,6 +273,7 @@ def answer_question(
     # ── Step 2b: Keyword-enhanced search for log queries ──────────────────────
     is_log_q = _is_log_query(question)
     kw_chunks = []
+    sev_chunks = []
 
     if is_log_q:
         search_keywords = _extract_search_keywords(question)
@@ -280,8 +282,13 @@ def answer_question(
             kw_chunks = keyword_search(namespace, search_keywords, top_k=top_k)
             _step("keyword_done", f"Keyword search found {len(kw_chunks)} additional matches")
 
+        # Also pull error-severity chunks for cross-file distribution
+        _step("severity_search", "Searching for error-severity chunks across all files...")
+        sev_chunks = severity_search(namespace, severity="error", top_k=top_k * 2)
+        _step("severity_done", f"Severity search found {len(sev_chunks)} error chunks")
+
     # ── Step 2c: Merge & deduplicate ──────────────────────────────────────────
-    all_raw = raw_chunks + kw_chunks
+    all_raw = raw_chunks + kw_chunks + sev_chunks
     seen = set()
     deduped = []
     for c in all_raw:
@@ -336,6 +343,12 @@ def answer_question(
                       f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})",
                       confidence=conf_result.to_dict())
 
+                # File-level error aggregation
+                _step("file_aggregation", f"Aggregating errors across files from {len(analysis_chunks)} chunks...")
+                agg_report = aggregate_by_file(analysis_chunks)
+                _step("file_aggregation_done",
+                      f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s), dominant: {agg_report.dominant_file or 'N/A'}")
+
                 _step("log_summarize",
                       f"Low embedding confidence but {len(analysis_chunks)} log entries found — "
                       "passing enriched context to LLM for structured summary...")
@@ -347,6 +360,7 @@ def answer_question(
                     trend_summary=trend_report.summary_text(),
                     cluster_summary=cluster_report.summary_text(),
                     confidence_summary=conf_result.reasoning,
+                    file_aggregation_summary=agg_report.summary_text,
                 )
                 return _result(RAGResponse(
                     answer=llm_resp.answer,
@@ -408,6 +422,12 @@ def answer_question(
               f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})",
               confidence=conf_result.to_dict())
 
+        # File-level error aggregation
+        _step("file_aggregation", f"Aggregating errors across files from {len(relevant)} chunks...")
+        agg_report = aggregate_by_file(relevant)
+        _step("file_aggregation_done",
+              f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s), dominant: {agg_report.dominant_file or 'N/A'}")
+
         _step("generate", f"Generating structured log analysis from {len(relevant)} chunks...")
         from core.llm.llm_service import get_llm_service
         svc = get_llm_service()
@@ -417,9 +437,20 @@ def answer_question(
             trend_summary=trend_report.summary_text(),
             cluster_summary=cluster_report.summary_text(),
             confidence_summary=conf_result.reasoning,
+            file_aggregation_summary=agg_report.summary_text,
         )
         _step("generate_done", f"Log analysis generated (mode={llm_resp.mode})")
-        print(f"  [bakup:debug] classification=project(log) | docs_retrieved={len(ranked)} | llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
+
+        # Debug: file-level and severity breakdown
+        from collections import Counter
+        file_names = [getattr(r, 'file_name', '') or r.source_file for r in relevant]
+        sev_names = [getattr(r, 'severity', 'unknown') or 'unknown' for r in relevant]
+        print(f"  [bakup:debug] classification=project(log) | docs_retrieved={len(ranked)} | "
+              f"files_contributing={dict(Counter(file_names))} | "
+              f"severity_dist={dict(Counter(sev_names))} | "
+              f"confidence={conf_result.confidence_score:.2f}({conf_result.confidence_level}) | "
+              f"cross_file_factor={conf_result.factors.get('cross_file', 'N/A')} | "
+              f"llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
 
         return _result(RAGResponse(
             answer=llm_resp.answer,

@@ -8,12 +8,16 @@ POST /index/upload   — ingest uploaded files via multipart form data
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, Form
 from pydantic import BaseModel
+
+logger = logging.getLogger("bakup.ingestion")
 
 router = APIRouter()
 
@@ -41,6 +45,101 @@ class IndexResponse(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# Docker volume mount points that local paths must reside under (if set).
+# When BAKUP_DOCKER_VOLUMES is set (comma-separated), only paths inside those
+# directories are allowed.  Unset = no restriction (native / dev mode).
+_DOCKER_VOLUMES: list[str] = [
+    v.strip()
+    for v in os.environ.get("BAKUP_DOCKER_VOLUMES", "").split(",")
+    if v.strip()
+]
+
+
+def _normalize_path(raw: str) -> str:
+    """
+    Normalize a user-supplied path string.
+    Handles Windows backslashes, forward slashes, mixed separators,
+    and resolves to an absolute path.
+    Works on Windows, macOS, and Linux.
+    """
+    # Replace any forward slashes with OS separator for consistency
+    cleaned = raw.strip().strip('"').strip("'")
+    # os.path.normpath handles // and mixed separators
+    normed = os.path.normpath(cleaned)
+    # os.path.abspath resolves relative paths against cwd
+    absolute = os.path.abspath(normed)
+    return absolute
+
+
+def _validate_path(raw: str, *, kind: str = "directory") -> str:
+    """
+    Normalize *raw*, validate that it exists and is the expected *kind*
+    ('directory' or 'file'), and enforce Docker volume restrictions.
+    Returns the normalized absolute path string.
+    Raises HTTPException with a clear message on any failure.
+    """
+    logger.info("Path received (raw): %r", raw)
+
+    if not raw or not raw.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Path is empty. Please provide a valid absolute path.",
+        )
+
+    resolved = _normalize_path(raw)
+    logger.info("Path resolved (absolute): %s", resolved)
+
+    # ── Existence check ──────────────────────────────────────────────────
+    if not os.path.exists(resolved):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid path. The {kind} does not exist: {resolved}\n"
+                "Ensure the full absolute path is provided and the "
+                f"{kind} is accessible by the application."
+            ),
+        )
+
+    # ── Type check ───────────────────────────────────────────────────────
+    if kind == "directory" and not os.path.isdir(resolved):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Path is not a directory: {resolved}\n"
+                "Please provide the path to a project folder, not a single file."
+            ),
+        )
+    if kind == "file" and not os.path.isfile(resolved):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Path is not a file: {resolved}\n"
+                "Please provide the path to a log file."
+            ),
+        )
+
+    # ── Docker volume restriction ────────────────────────────────────────
+    if _DOCKER_VOLUMES:
+        inside = any(
+            resolved.startswith(os.path.normpath(vol))
+            for vol in _DOCKER_VOLUMES
+        )
+        if not inside:
+            allowed = ", ".join(_DOCKER_VOLUMES)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Path is outside the allowed mounted volumes.\n"
+                    f"Allowed: {allowed}\n"
+                    f"Received: {resolved}\n"
+                    "When running inside Docker, place your project files "
+                    "inside the mounted directory and reference the container path."
+                ),
+            )
+
+    return resolved
+
+
 def _derive_namespace(path: str) -> str:
     """Stable namespace from a path string."""
     return hashlib.sha256(path.strip().encode()).hexdigest()[:24]
@@ -50,27 +149,52 @@ def _run_local_ingestion(path: str, log_path: Optional[str], namespace: str) -> 
     """
     Walk a local project, parse any log file, embed all chunks,
     and store them in ChromaDB. Returns total chunks stored.
+
+    Enriched with:
+      - Severity distribution debug logging
+      - Per-file chunk counts
     """
     from core.ingestion.file_walker import walk_project
     from core.ingestion.log_parser import parse_log_file
     from core.embeddings.embedder import embed_texts
     from core.retrieval.vector_store import add_chunks
     from core.ingestion.chunker import Chunk
+    from collections import Counter
 
     project_root = Path(path).resolve()
+    logger.info("Ingesting project root: %s", project_root)
     chunks: list[Chunk] = list(walk_project(project_root))
+    logger.info("Walk complete: %d chunk(s) from source files", len(chunks))
 
     if log_path:
         log_file = Path(log_path).resolve()
+        logger.info("Log file path (resolved): %s", log_file)
         if log_file.is_file():
-            chunks.extend(parse_log_file(log_file, project_root))
+            log_chunks = parse_log_file(log_file, project_root)
+            logger.info("Log parser: %d chunk(s) from %s", len(log_chunks), log_file.name)
+            chunks.extend(log_chunks)
+        else:
+            logger.warning("Log file does not exist or is not a file: %s", log_file)
 
     if not chunks:
+        logger.warning("No chunks produced from %s", project_root)
         return 0
+
+    # ── Debug: severity distribution ──────────────────────────────────────
+    sev_counts = Counter(c.severity for c in chunks if c.source_type == "log")
+    file_counts = Counter(c.file_name for c in chunks if c.file_name)
+    logger.info(
+        "Severity distribution: %s | Files indexed: %d | File breakdown: %s",
+        dict(sev_counts),
+        len(file_counts),
+        dict(file_counts.most_common(10)),
+    )
 
     texts = [c.text for c in chunks]
     embeddings = embed_texts(texts)
-    return add_chunks(chunks, embeddings, namespace=namespace)
+    stored = add_chunks(chunks, embeddings, namespace=namespace)
+    logger.info("Stored %d chunks in namespace %s", stored, namespace)
+    return stored
 
 
 def _run_github_ingestion(repo_url: str, branch: str, namespace: str) -> int:
@@ -95,28 +219,37 @@ async def index_local(body: IndexLocalRequest) -> IndexResponse:
     Read-only scan of a local project directory.
     Optionally also indexes a log file.
     """
-    project_path = Path(body.path)
-    if not project_path.exists():
-        raise HTTPException(status_code=400, detail=f"Path does not exist: {body.path}")
-    if not project_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Path is not a directory: {body.path}")
+    # ── Normalize and validate project path ──────────────────────────────
+    resolved_path = _validate_path(body.path, kind="directory")
 
-    namespace = body.namespace or _derive_namespace(body.path)
+    # ── Normalize and validate optional log file path ────────────────────
+    resolved_log: Optional[str] = None
+    if body.log_path and body.log_path.strip():
+        resolved_log = _validate_path(body.log_path, kind="file")
+
+    namespace = body.namespace or _derive_namespace(resolved_path)
 
     try:
         stored = _run_local_ingestion(
-            path=body.path,
-            log_path=body.log_path,
+            path=resolved_path,
+            log_path=resolved_log,
             namespace=namespace,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}")
+        logger.exception("Ingestion failed for path: %s", resolved_path)
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Ingestion failed: {exc}\n"
+                "Ensure the folder exists and is accessible by the application."
+            ),
+        )
 
     return IndexResponse(
         status="ok",
         namespace=namespace,
         chunks_stored=stored,
-        message=f"Indexed {stored} chunks from {body.path}.",
+        message=f"Indexed {stored} chunks from {resolved_path}.",
     )
 
 
