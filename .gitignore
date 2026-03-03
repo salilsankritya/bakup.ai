@@ -1,0 +1,21 @@
+# Environment secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Vector database
+vectordb/
+
+# Model weights (large files, downloaded on first run)
+model-weights/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

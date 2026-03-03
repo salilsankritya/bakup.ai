@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bakup.ai — Local-First Incident Intelligence</title>
+  <meta name="description" content="Bakup.ai reads your codebase and logs locally, then answers incident questions with cited sources and confidence scores. No data leaves your machine." />
+  <link rel="stylesheet" href="fonts.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ─── NAV ─────────────────────────────────────────────────────────────── -->
+  <header class="nav" id="nav">
+    <div class="nav__inner">
+      <a class="nav__brand" href="/">bakup.ai</a>
+      <nav class="nav__links">
+        <a href="#how-it-works">Docs</a>
+        <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+        <a href="#preview" class="btn btn--outline">Request Access</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ─── HERO ─────────────────────────────────────────────────────────────── -->
+  <section class="hero" id="hero">
+    <div class="hero__glow" aria-hidden="true"></div>
+    <div class="container hero__inner">
+      <div class="hero__content animate-fade-in">
+        <h1 class="hero__headline">
+          Understand any incident.<br />
+          Without leaving your laptop.
+        </h1>
+        <p class="hero__sub">
+          Bakup.ai reads your codebase and logs locally, then answers questions
+          about what went wrong, what changed, and what was done before —
+          with file references and confidence scores attached to every answer.
+        </p>
+        <div class="hero__cta">
+          <a href="#preview" class="btn btn--primary">Request Developer Preview Access</a>
+          <a href="#how-it-works" class="hero__scroll-link">See how it works ↓</a>
+        </div>
+        <ul class="trust-badges">
+          <li class="badge">Local-only</li>
+          <li class="badge">Read-only access</li>
+          <li class="badge">No data leaves your machine</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── HOW IT WORKS ─────────────────────────────────────────────────────── -->
+  <section class="section" id="how-it-works">
+    <div class="container">
+      <h2 class="section__title">How it works</h2>
+      <div class="steps" id="steps">
+        <div class="step">
+          <span class="step__num">01</span>
+          <h3 class="step__title">Point it at your project</h3>
+          <p class="step__body">
+            Provide a local path to your codebase. Bakup reads your source files
+            and recent logs in read-only mode. Nothing is indexed remotely.
+            Nothing leaves disk.
+          </p>
+          <div class="terminal" aria-label="Terminal example">
+            <span class="terminal__prompt">$</span>
+            <span class="terminal__cmd">bakup index --path /your/project</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step__num">02</span>
+          <h3 class="step__title">Ask what happened</h3>
+          <p class="step__body">
+            Type a question in plain English. Bakup searches across your local
+            project context to find relevant matches across code and logs.
+          </p>
+          <div class="terminal" aria-label="Terminal example">
+            <span class="terminal__prompt">$</span>
+            <span class="terminal__cmd">bakup ask "Have we seen this null pointer before?"</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step__num">03</span>
+          <h3 class="step__title">Get an answer with citations</h3>
+          <p class="step__body">
+            Responses reference the specific files, functions, and log lines that
+            informed the answer. A confidence score is attached to every result.
+            You decide what to act on.
+          </p>
+          <div class="terminal" aria-label="Terminal example">
+            <span class="terminal__prompt">&gt;</span>
+            <span class="terminal__cmd terminal__cmd--output">auth/session.js:142 — confidence: 0.87</span>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step__num">04</span>
+          <h3 class="step__title">Copy the answer into your postmortem</h3>
+          <p class="step__body">
+            Every response includes the answer, confidence score, source file,
+            and line numbers. Copy the JSON or the UI output directly into your
+            incident timeline or runbook — sources intact.
+          </p>
+          <div class="terminal" aria-label="Terminal example">
+            <span class="terminal__prompt">&gt;</span>
+            <span class="terminal__cmd terminal__cmd--output">confidence: 0.84 · src/auth/session.py:28–45 · log:412</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── SECURITY ─────────────────────────────────────────────────────────── -->
+  <section class="section section--trust" id="security">
+    <div class="container">
+      <h2 class="trust__headline">
+        Your code never leaves your machine.<br />
+        <span class="trust__headline--dim">That's not a setting. That's the architecture.</span>
+      </h2>
+      <div class="trust__pillars">
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3 class="pillar__title">Read-only filesystem access</h3>
+          <p class="pillar__body">
+            Bakup requests read permissions only. It cannot create, overwrite,
+            or delete files. There is no write path in the codebase.
+          </p>
+        </div>
+
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          </div>
+          <h3 class="pillar__title">No network calls during analysis</h3>
+          <p class="pillar__body">
+            Once installed, Bakup makes zero outbound connections when processing
+            your project. Analysis runs entirely on your hardware. Verify this
+            with a network monitor while it runs.
+          </p>
+        </div>
+
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          </div>
+          <h3 class="pillar__title">No telemetry. No crash reports.</h3>
+          <p class="pillar__body">
+            We do not collect information about how you use Bakup, what projects
+            you point it at, or what questions you ask. We have no pipeline
+            to receive it.
+          </p>
+        </div>
+      </div>
+      <p class="trust__footnote">
+        This website is the only component of Bakup that lives on a server.
+        The tool itself has no server-side dependency.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── DEVELOPER PREVIEW ────────────────────────────────────────────────── -->
+  <section class="section" id="preview">
+    <div class="container">
+      <div class="preview__grid">
+        <div class="preview__copy">
+          <span class="preview__label">Developer Preview — Limited Access</span>
+          <h2 class="preview__title">A working build.<br />An honest disclaimer.</h2>
+          <p class="preview__body">
+            This is a functional pre-release made available to a small group of
+            engineers for early testing and feedback.
+          </p>
+          <p class="preview__body">
+            It works. The core analysis, citation, and confidence-scoring features
+            are operational. The installation experience is minimal and the
+            interface is sparse. This is intentional — we are testing the engine,
+            not the wrapper.
+          </p>
+          <ul class="preview__list">
+            <li><strong>What this is:</strong> A working local binary. A real answer to the question: does this actually help during an incident?</li>
+            <li><strong>What this is not:</strong> A finished product. A stable API. A supported release. Documentation is partial. Edge cases exist.</li>
+            <li><strong>What we're asking for:</strong> Run it against a real project. Ask it a question you already know the answer to. Tell us where it was wrong.</li>
+          </ul>
+        </div>
+
+        <!-- ─── KEY-GATE FORM ──────────────────────────────────────────────── -->
+        <div class="preview__gate" id="download-gate">
+          <form class="gate__form" id="gate-form" autocomplete="off" novalidate>
+            <label class="gate__label" for="access-key">Access Key</label>
+            <div class="gate__input-row">
+              <input
+                class="gate__input"
+                type="password"
+                id="access-key"
+                name="access-key"
+                placeholder="Enter your access key"
+                autocomplete="off"
+                spellcheck="false"
+                aria-describedby="gate-feedback"
+              />
+              <button class="btn btn--primary gate__submit" type="submit" id="gate-submit">
+                Validate
+              </button>
+            </div>
+            <p class="gate__feedback gate__feedback--error" id="gate-error" role="alert" aria-live="polite" hidden>
+              Invalid access key. Check your key and try again.
+            </p>
+          </form>
+
+          <!-- Shown after valid key -->
+          <div class="gate__success" id="gate-success" hidden>
+            <p class="gate__success-msg">Access key verified.</p>
+            <a
+              class="btn btn--primary gate__download"
+              id="download-link"
+              href="#"
+              download
+            >
+              Download for macOS / Linux
+            </a>
+            <div class="gate__checksum" id="gate-checksum">
+              <span class="gate__checksum-label">SHA-256</span>
+              <code class="gate__checksum-value" id="checksum-value"></code>
+            </div>
+            <p class="gate__platform-note">Windows support in progress.</p>
+          </div>
+
+          <!-- Security disclaimer -->
+          <div class="gate__disclaimer">
+            <p>
+              <strong>Note:</strong> This key-gate is access control, not DRM.
+              It exists to limit distribution to engineers we can contact for
+              feedback. It does not encrypt the download or prevent redistribution.
+              Please don't share your key.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── QUICK START ───────────────────────────────────────────────────────── -->
+  <section class="section section--quickstart" id="quickstart">
+    <div class="container container--narrow">
+      <h2 class="section__title">You'll have it running before your next standup.</h2>
+      <p class="quickstart__sub">Docker. Four steps. Under ten minutes.</p>
+
+      <ol class="quickstart__steps">
+        <li class="qs__step">
+          <div class="qs__num">1</div>
+          <div class="qs__body">
+            <p class="qs__desc">Unzip, copy the env file, and set your project path. Docker handles everything else.</p>
+            <div class="code-block">
+              <div class="code-block__bar">
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+              </div>
+              <pre class="code-block__pre"><code><span class="code-comment"># Unzip the archive</span>
+unzip bakup-developer-preview.zip &amp;&amp; cd bakup
+<span class="code-comment"># Configure — set BAKUP_PROJECT_PATH to your project directory</span>
+cp .env.example .env<span class="cursor">▌</span></code></pre>
+            </div>
+          </div>
+        </li>
+
+        <li class="qs__step">
+          <div class="qs__num">2</div>
+          <div class="qs__body">
+            <p class="qs__desc">Start the backend and local UI. First boot downloads the embedding model (~90 MB).</p>
+            <div class="code-block">
+              <div class="code-block__bar">
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+              </div>
+              <pre class="code-block__pre"><code>docker compose up</code></pre>
+            </div>
+          </div>
+        </li>
+
+        <li class="qs__step">
+          <div class="qs__num">3</div>
+          <div class="qs__body">
+            <p class="qs__desc">Index your project and an incident log. Returns a namespace you use to query.</p>
+            <div class="code-block">
+              <div class="code-block__bar">
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+              </div>
+              <pre class="code-block__pre"><code>curl -s -X POST http://localhost:8000/index \
+  -H <span class="code-string">"Content-Type: application/json"</span> \
+  -d <span class="code-string">'{"path":"/your/project","log_path":"/your/project/logs/app.log"}'</span></code></pre>
+            </div>
+          </div>
+        </li>
+
+        <li class="qs__step">
+          <div class="qs__num">4</div>
+          <div class="qs__body">
+            <p class="qs__desc">Ask a question. Paste the namespace from step 3.</p>
+            <div class="code-block">
+              <div class="code-block__bar">
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+                <span class="code-block__dot"></span>
+              </div>
+              <pre class="code-block__pre"><code>curl -s -X POST http://localhost:8000/ask \
+  -H <span class="code-string">"Content-Type: application/json"</span> \
+  -d <span class="code-string">'{"question":"Have we seen connection timeouts before?","namespace":"&lt;from step 3&gt;"}'</span></code></pre>
+            </div>
+          </div>
+        </li>
+      </ol>
+
+      <p class="quickstart__docs">
+        Full documentation and known limitations →
+        <a href="https://docs.bakup.ai" target="_blank" rel="noopener">docs.bakup.ai</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- ─── FOOTER ────────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <span class="footer__brand">bakup.ai &nbsp;© 2026</span>
+      <nav class="footer__links">
+        <a href="#quickstart">Docs</a>
+        <a href="#">Changelog</a>
+        <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+        <a href="#">Privacy</a>
+      </nav>
+      <span class="footer__tagline">Built for engineers. Runs on your hardware.</span>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

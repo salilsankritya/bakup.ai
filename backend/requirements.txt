@@ -1,0 +1,27 @@
+# Bakup Developer Preview — Python dependencies
+# Pin all versions. This is a distributed binary — reproducibility matters.
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-dotenv==1.0.1
+pydantic==2.7.4
+python-multipart==0.0.9    # Required for multipart file uploads
+
+# ── Embeddings ────────────────────────────────────────────────────────────────
+sentence-transformers==3.0.1
+torch==2.3.1           # CPU-only; GPU support requires separate install
+transformers==4.44.2
+
+# ── Vector store ──────────────────────────────────────────────────────────────
+chromadb==0.5.5
+
+# ── Local LLM ────────────────────────────────────────────────────────────────
+llama-cpp-python==0.2.88
+
+# ── Git / GitHub ingestion ───────────────────────────────────────────────────
+gitpython==3.1.43      # Read-only git clone for GitHub repo ingestion
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+httpx==0.27.0          # Async HTTP for healthcheck script
+chardet==5.2.0         # File encoding detection during ingestion

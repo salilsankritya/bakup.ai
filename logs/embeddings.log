@@ -1,0 +1,45 @@
+2026-03-01T08:00:12Z INFO  EmbeddingService starting up
+2026-03-01T08:00:12Z INFO  Model: sentence-transformers/all-MiniLM-L6-v2
+2026-03-01T08:00:12Z INFO  Cache dir: C:\Users\91876\Documents\bakup.ai\model-weights
+2026-03-01T08:00:12Z INFO  Device: cpu (CUDA not available)
+2026-03-01T08:00:16Z INFO  Model loaded — 22.7M parameters — 4.1s
+
+2026-03-01T08:03:46Z INFO  encode() called: 25 chunks, batch_size=32
+2026-03-01T08:03:51Z INFO  encode() complete: 25 vectors (dim=384) in 4.9s — avg 196ms/chunk
+
+2026-03-01T09:15:07Z INFO  encode() called: 62 chunks, batch_size=32
+2026-03-01T09:15:07Z INFO  Encoding batch 1: texts 0–31
+2026-03-01T09:15:09Z INFO  Encoding batch 1: done (1.9s)
+2026-03-01T09:15:09Z INFO  Encoding batch 2: texts 32–61
+2026-03-01T09:15:11Z INFO  Encoding batch 2: done (1.8s)
+2026-03-01T09:15:11Z INFO  encode() complete: 62 vectors in 3.7s — avg 60ms/chunk
+
+2026-03-01T10:44:01Z INFO  encode() called: 1 query, batch_size=32
+2026-03-01T10:44:01Z INFO  encode() complete: 1 vector in 62ms
+
+2026-03-01T12:18:42Z WARNING encode() called: 1 chunk — text length 12,480 chars (exceeds recommended 512 tokens)
+2026-03-01T12:18:42Z WARNING Sentence-transformer will silently truncate input to 256 tokens
+  File "core/ingestion/chunker.py", line 112, in chunk_file
+    yield Chunk(text=block, ...)
+  Chunk is too large — consider reducing CHUNK_LINES constant (currently 60)
+2026-03-01T12:18:43Z INFO  encode() complete: 1 vector (truncated input) in 98ms
+
+2026-03-01T14:55:30Z ERROR  encode() failed: RuntimeError
+  BLAS/LAPACK operation failed on CPU — possible memory pressure
+  File "sentence_transformers/SentenceTransformer.py", line 168, in encode
+    embeddings = self._encode(sentences_batch, ...)
+RuntimeError: [enforce fail at alloc_cpu.cpp:80] data. DefaultCPUAllocator: not enough memory: you tried to allocate 201326592 bytes.
+2026-03-01T14:55:30Z ERROR  OOM on CPU during encode() — batch_size=32, input_count=62
+  Retrying with batch_size=8
+2026-03-01T14:55:34Z INFO  Retry with batch_size=8 succeeded in 6.2s
+
+2026-03-02T09:11:08Z INFO  encode() called: 1 query (github URL validation path)
+2026-03-02T09:11:08Z INFO  encode() complete: 1 vector in 58ms (model warm)
+
+2026-03-02T10:27:49Z WARNING encode() called: 1 query — model cold after 45min idle
+2026-03-02T10:27:49Z WARNING First inference after idle may be slower due to CPU cache eviction
+2026-03-02T10:27:50Z INFO  encode() complete: 1 vector in 210ms (cold)
+
+2026-03-03T08:00:19Z INFO  EmbeddingService starting up (restart)
+2026-03-03T08:00:19Z INFO  Model loaded from cache — 2.7s
+2026-03-03T08:00:19Z INFO  Device: cpu — estimated throughput: ~16 chunks/sec

@@ -1,0 +1,112 @@
+2026-03-01T08:00:11Z INFO  Starting BackTraceOps backend — main.py
+2026-03-01T08:00:11Z INFO  Config loaded: BAKUP_CHROMA_DIR=./vectordb BAKUP_MODEL_CACHE_DIR=./model-weights
+2026-03-01T08:00:11Z INFO  Access key verified
+2026-03-01T08:00:12Z INFO  Loading sentence-transformer model: all-MiniLM-L6-v2
+2026-03-01T08:00:16Z INFO  Model loaded in 4.1s — device: cpu
+2026-03-01T08:00:16Z INFO  ChromaDB client initialised: ./vectordb
+2026-03-01T08:00:17Z INFO  Uvicorn running on http://0.0.0.0:8000
+
+2026-03-01T08:03:44Z INFO  POST /index — project_path=C:\Users\91876\Documents\bakup.ai\sample-project
+2026-03-01T08:03:44Z INFO  File walker: scanning C:\Users\91876\Documents\bakup.ai\sample-project
+2026-03-01T08:03:44Z INFO  Discovered 9 source files
+2026-03-01T08:03:44Z INFO  Chunking: src/auth/session.py → 4 chunk(s)
+2026-03-01T08:03:44Z INFO  Chunking: src/payments/processor.py → 3 chunk(s)
+2026-03-01T08:03:45Z INFO  Chunking: logs/app.log → 18 chunk(s)
+2026-03-01T08:03:46Z INFO  Embedding 25 chunks (batch_size=32)
+2026-03-01T08:03:51Z INFO  Upserted 25 chunks into namespace d2a64b8f709574d8f1899038
+2026-03-01T08:03:51Z INFO  POST /index completed in 7.2s — 200 OK
+
+2026-03-01T08:07:22Z INFO  POST /ask — question="Are there NullPointerExceptions in the logs?" namespace=d2a64b8f709574d8f1899038
+2026-03-01T08:07:22Z INFO  Embedding query (21 tokens)
+2026-03-01T08:07:22Z INFO  ChromaDB query: top_k=5 namespace=d2a64b8f709574d8f1899038
+2026-03-01T08:07:22Z INFO  Retrieved 5 chunks — top confidence: 0.91
+2026-03-01T08:07:22Z INFO  POST /ask completed in 320ms — 200 OK
+
+2026-03-01T09:15:03Z INFO  POST /index — project_path=C:\Users\91876\Documents\bakup.ai namespace=bakupai-self
+2026-03-01T09:15:03Z INFO  File walker: scanning C:\Users\91876\Documents\bakup.ai
+2026-03-01T09:15:04Z WARNING Skipping binary file: model-weights/all-MiniLM-L6-v2/pytorch_model.bin (148MB)
+2026-03-01T09:15:04Z WARNING Skipping binary file: vectordb/chroma.sqlite3
+2026-03-01T09:15:04Z INFO  Discovered 22 source files
+2026-03-01T09:15:05Z INFO  Chunking: backend/main.py → 2 chunk(s)
+2026-03-01T09:15:05Z INFO  Chunking: backend/config.py → 1 chunk(s)
+2026-03-01T09:15:05Z INFO  Chunking: backend/core/ingestion/chunker.py → 6 chunk(s)
+2026-03-01T09:15:05Z INFO  Chunking: backend/core/ingestion/file_walker.py → 4 chunk(s)
+2026-03-01T09:15:05Z INFO  Chunking: backend/core/ingestion/log_parser.py → 5 chunk(s)
+2026-03-01T09:15:05Z INFO  Chunking: backend/core/ingestion/github_ingester.py → 3 chunk(s)
+2026-03-01T09:15:05Z INFO  Chunking: backend/core/retrieval/ranker.py → 4 chunk(s)
+2026-03-01T09:15:06Z INFO  Chunking: backend/core/retrieval/search.py → 3 chunk(s)
+2026-03-01T09:15:06Z INFO  Chunking: backend/api/routes.py → 7 chunk(s)
+2026-03-01T09:15:06Z INFO  Chunking: ui/app.js → 11 chunk(s)
+2026-03-01T09:15:07Z INFO  Embedding 46 chunks (batch_size=32)
+2026-03-01T09:15:14Z INFO  Upserted 46 chunks into namespace bakupai-self
+2026-03-01T09:15:14Z INFO  POST /index completed in 11.3s — 200 OK
+
+2026-03-01T10:44:01Z INFO  POST /ask — question="How does the ranker calculate confidence scores?" namespace=bakupai-self
+2026-03-01T10:44:02Z INFO  Retrieved 5 chunks — top confidence: 0.88
+2026-03-01T10:44:02Z INFO  POST /ask completed in 290ms — 200 OK
+
+2026-03-01T11:08:35Z INFO  POST /ask — question="What embedding model is used?" namespace=bakupai-self
+2026-03-01T11:08:35Z INFO  Retrieved 5 chunks — top confidence: 0.79
+2026-03-01T11:08:35Z INFO  POST /ask completed in 275ms — 200 OK
+
+2026-03-01T13:22:10Z WARNING ChromaDB collection bakupai-self already exists — updating existing vectors
+2026-03-01T13:22:11Z ERROR  core/ingestion/chunker.py line 88 in chunk_file: UnicodeDecodeError: 'utf-8' codec can't decode byte 0x89 in position 0
+  File "core/ingestion/file_walker.py", line 54, in walk_project
+    for chunk in chunk_file(path, root, source_type):
+  File "core/ingestion/chunker.py", line 88, in chunk_file
+    content = path.read_text(encoding="utf-8")
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0x89 in position 0: invalid start byte
+2026-03-01T13:22:11Z WARNING Skipping non-UTF-8 file: ui/icons/logo.png
+2026-03-01T13:22:11Z INFO  POST /index resumed after skip — 21 files processed
+
+2026-03-01T14:00:00Z INFO  GET /health — 200 OK (uptime: 21600s)
+
+2026-03-01T16:31:44Z ERROR  POST /ask — 422 Unprocessable Entity
+  Request body: {"namespace": "bakupai-self"}
+  Missing required field: question
+  File "api/routes.py", line 47, in ask_endpoint
+    question = body["question"]
+KeyError: 'question'
+2026-03-01T16:31:44Z INFO  Validation error returned to client — 422
+
+2026-03-01T18:05:12Z INFO  POST /ask — question="Where is confidence threshold defined?" namespace=bakupai-self
+2026-03-01T18:05:12Z INFO  Retrieved 3 chunks — top confidence: 0.31
+2026-03-01T18:05:12Z WARNING No results above confidence threshold 0.35 — returning no_data=true
+2026-03-01T18:05:12Z INFO  POST /ask completed in 310ms — 200 OK
+
+2026-03-02T08:00:05Z INFO  Uvicorn restarting — SIGTERM received
+2026-03-02T08:00:05Z INFO  Shutdown complete
+
+2026-03-02T08:00:18Z INFO  Starting BackTraceOps backend — main.py
+2026-03-02T08:00:19Z INFO  Loading sentence-transformer model: all-MiniLM-L6-v2
+2026-03-02T08:00:21Z INFO  Model loaded in 2.9s — device: cpu (cached)
+2026-03-02T08:00:21Z INFO  ChromaDB client initialised: ./vectordb — 2 existing collection(s)
+2026-03-02T08:00:21Z INFO  Uvicorn running on http://0.0.0.0:8000
+
+2026-03-02T09:11:08Z INFO  POST /index — github_url=https://github.com/owner/private-service branch=main
+2026-03-02T09:11:09Z ERROR  core/ingestion/github_ingester.py line 72 in clone_repo: GitCommandError
+  git clone https://github.com/owner/private-service /tmp/bakup_clone_a8f3c1 returned exit status 128
+  stderr: "remote: Repository not found."
+  fatal: repository 'https://github.com/owner/private-service/' not found
+2026-03-02T09:11:09Z ERROR  POST /index — GitHub clone failed: repository not found or access denied — 400 Bad Request
+
+2026-03-02T10:27:50Z WARNING Connection timeout: chromadb internal WAL flush after 5000ms
+2026-03-02T10:27:50Z ERROR  chromadb.errors.InvalidCollectionException: Collection with id None does not exist
+  File "core/retrieval/search.py", line 38, in query_namespace
+    results = collection.query(query_embeddings=[embedding], n_results=top_k)
+  File "chromadb/api/models/Collection.py", line 182, in query
+    raise InvalidCollectionException(...)
+2026-03-02T10:27:50Z ERROR  POST /ask — namespace=stale-ns-29fa: collection not found — 404
+2026-03-02T10:27:51Z INFO  POST /ask retried with fallback namespace — no results found
+
+2026-03-02T11:45:00Z INFO  GET /health — 200 OK (uptime: 5680s)
+
+2026-03-02T14:03:22Z INFO  POST /index — project_path=C:\Users\91876\Documents\bakup.ai namespace=bakupai-self (re-index)
+2026-03-02T14:03:23Z INFO  Embedding 46 chunks (batch_size=32)
+2026-03-02T14:03:26Z INFO  Upserted 46 chunks — namespace bakupai-self updated
+2026-03-02T14:03:26Z INFO  POST /index completed in 3.1s — 200 OK (incremental)
+
+2026-03-03T08:00:09Z INFO  Starting BackTraceOps backend — main.py
+2026-03-03T08:00:11Z INFO  Model loaded in 2.7s — device: cpu (cached)
+2026-03-03T08:00:11Z INFO  ChromaDB client initialised — 2 collection(s): [d2a64b8f709574d8f1899038, bakupai-self]
+2026-03-03T08:00:12Z INFO  Uvicorn running on http://0.0.0.0:8000

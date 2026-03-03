@@ -1,0 +1,26 @@
+/*
+ * BackTraceOps — Typography
+ *
+ * Inter is loaded from Google Fonts (index.html preconnect + link).
+ * These declarations set up font stacks and expose the canonical
+ * --font-ui and --font-mono tokens used by styles.css.
+ */
+
+:root {
+  /* Aligns with --font-ui in styles.css */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system,
+               BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code',
+               'Source Code Pro', 'Menlo', 'Monaco', 'Consolas',
+               'Liberation Mono', monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+code, pre, kbd, samp,
+.source-card__excerpt {
+  font-family: var(--font-mono);
+}

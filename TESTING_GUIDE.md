@@ -1,0 +1,415 @@
+# Bakup Developer Preview — Testing Guide
+
+This guide covers everything from download to your first answered query. It assumes a working knowledge of Docker, the terminal, and environment files.
+
+---
+
+## Prerequisites
+
+| Requirement | Version |
+|---|---|
+| Docker Desktop (or Docker Engine + Compose plugin) | 24+ |
+| 8 GB RAM available to Docker | — |
+| ~4 GB free disk space (model weights + vector DB) | — |
+| Port 8000 and 3000 available on localhost | — |
+
+No Python, Node, or additional runtimes are required on the host. Everything runs inside containers.
+
+---
+
+## 1. Download
+
+1. Go to the Bakup landing page and enter your access key when prompted.
+2. Your browser downloads `bakup-developer-preview.zip`.
+
+> The access key is single-use for download verification only. It is not your runtime credential — that is set separately in step 3.
+
+---
+
+## 2. Unzip
+
+```sh
+unzip bakup-developer-preview.zip -d bakup
+cd bakup
+```
+
+Expected top-level layout after extraction:
+
+```
+bakup/
+├── docker-compose.yml
+├── .env.example
+├── backend/
+├── vectordb/
+├── model-weights/
+├── ui/
+├── scripts/
+└── sample-project/
+```
+
+Do not move or rename `model-weights/` or `vectordb/`. The Docker mounts resolve relative to `docker-compose.yml`.
+
+---
+
+## 3. Set Environment Variables
+
+Copy the example file and fill in the required values:
+
+```sh
+cp .env.example .env
+```
+
+Open `.env` in any editor. The two required fields:
+
+```dotenv
+# Runtime access key — protects the local API from other processes on your machine.
+# Set this to any string you choose. You will use it in the Authorization header
+# (or the UI handles it automatically if left at the default).
+BAKUP_ACCESS_KEY=your-chosen-key
+
+# Absolute path to the project you want to index first.
+# The backend mounts this path read-only — it will not write to your source tree.
+BAKUP_PROJECT_PATH=/absolute/path/to/your/project
+```
+
+All other variables have working defaults. A full reference is in `.env.example` with an inline comment on every field.
+
+> **Windows paths:** Use forward slashes or double backslashes.
+> `C:/Users/you/projects/my-app` or `C:\\Users\\you\\projects\\my-app`
+
+---
+
+## 4. Run Docker
+
+```sh
+docker compose up
+```
+
+First boot takes longer — Docker pulls base images and the startup script downloads `all-MiniLM-L6-v2` (the embedding model, ~90 MB) into `model-weights/`. Subsequent starts are fast because the directory is volume-mounted.
+
+Watch for these two lines before proceeding:
+
+```
+bakup-backend  | INFO:     Application startup complete.
+bakup-ui       | ready on http://localhost:3000
+```
+
+If the backend exits immediately with code 1, the most common cause is a missing or incorrect `BAKUP_ACCESS_KEY` or an invalid `BAKUP_PROJECT_PATH`. Check `.env` and re-run.
+
+To run in the background:
+
+```sh
+docker compose up -d
+docker compose logs -f   # tail logs
+```
+
+---
+
+## 5. Verify the Backend
+
+```sh
+curl http://localhost:8000/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "llm_status": "configured",
+  "llm_message": "Provider: openai | Model: gpt-4o-mini"
+}
+```
+
+`llm_status` is `"configured"` if an LLM provider is set up, or `"not_configured"` if only extractive mode is available. If you get a connection error, the backend container is not yet ready. Wait a few seconds and retry.
+
+---
+
+## 6. Index Your Project
+
+### Option A — Web UI
+
+1. Open `http://localhost:3000` in any browser.
+2. Click **Index** in the sidebar.
+3. Under the **Local** tab, enter the absolute path from your `.env` (`BAKUP_PROJECT_PATH`) and click **Index Project**.
+4. Wait for the result — it shows the namespace and chunk count.
+
+### Option B — curl
+
+```sh
+curl -s -X POST http://localhost:8000/index \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/absolute/path/to/your/project"}' | python3 -m json.tool
+```
+
+Expected shape:
+
+```json
+{
+  "status": "ok",
+  "namespace": "a3f9b812c04e71d2",
+  "chunks_stored": 312,
+  "message": "Indexed 312 chunks from 47 files."
+}
+```
+
+Copy the `namespace` value. You need it for queries.
+
+To also index a log file in the same pass:
+
+```sh
+curl -s -X POST http://localhost:8000/index \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/absolute/path/to/your/project",
+    "log_path": "/absolute/path/to/your/project/logs/app.log"
+  }' | python3 -m json.tool
+```
+
+---
+
+## 7. Ask Your First Question
+
+### Option A — Web UI
+
+1. Click **Query** in the sidebar.
+2. The namespace field is pre-filled from the indexing step. Confirm it matches.
+3. Type a question and press **Ask** (or Ctrl+Enter).
+
+Try starting with something grounded in your code or logs:
+
+- *"What triggers a session timeout in this codebase?"*
+- *"Are there any NullPointerExceptions in the logs?"*
+- *"Where is the authentication token validated?"*
+
+The response shows the answer, confidence score, source files with line ranges, and whether the answer was extracted from code, logs, or generated by the local LLM.
+
+### Option B — curl
+
+```sh
+curl -s -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What causes a NullPointerException in this project?",
+    "namespace": "a3f9b812c04e71d2",
+    "top_k": 8,
+    "debug": true
+  }' | python3 -m json.tool
+```
+
+Expected shape:
+
+```json
+{
+  "answer": "...",
+  "confidence": 0.82,
+  "no_data": false,
+  "mode": "extractive",
+  "sources": [
+    {
+      "file": "src/auth/session.py",
+      "line_start": 28,
+      "line_end": 45,
+      "excerpt": "...",
+      "confidence": 0.82,
+      "confidence_label": "high",
+      "source_type": "code"
+    }
+  ],
+  "debug_trace": [
+    {"step": "classify", "message": "Classifying question...", "ms": 0.0},
+    {"step": "retrieve", "message": "Searching 312 indexed documents...", "ms": 12.4},
+    {"step": "rank_done", "message": "Top: 82% (high) in src/auth/session.py", "ms": 33.1},
+    {"step": "generate", "message": "Generating answer from 5 relevant chunks...", "ms": 33.5},
+    {"step": "done", "message": "Pipeline complete (1842ms)", "ms": 1842.0}
+  ]
+}
+```
+
+Set `"debug": true` to include the `debug_trace` array — a step-by-step log of the pipeline with timing. Omit it (or set `false`) for production use.
+
+If `no_data` is `true`, the question had no sufficiently similar match in the index. Try rephrasing closer to terminology in the codebase, or check that indexing completed with a non-zero `chunks_stored`.
+
+---
+
+## 8. Index a GitHub Repository (Optional)
+
+```sh
+curl -s -X POST http://localhost:8000/index/github \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repo_url": "https://github.com/your-org/your-repo",
+    "branch": "main"
+  }' | python3 -m json.tool
+```
+
+The backend performs a shallow clone (`depth=1`, `--filter=blob:none`) into a temporary directory, walks the source tree, and cleans up. No credentials are stored. For private repos, pass the token in the URL:
+
+```
+https://<token>@github.com/your-org/your-repo
+```
+
+The token is stripped from all logs before writing.
+
+---
+
+## 9. Try the Sample Project
+
+The ZIP includes a small fixture project for quick validation without needing your own codebase:
+
+```sh
+curl -s -X POST http://localhost:8000/index \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/app/sample-project"}' | python3 -m json.tool
+```
+
+> `/app/sample-project` is the path inside the container. The directory is mounted automatically.
+
+Then ask:
+
+```sh
+curl -s -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Where does a NullPointerException occur?",
+    "namespace": "<namespace from above>",
+    "top_k": 5
+  }' | python3 -m json.tool
+```
+
+You should get a high-confidence extractive answer pointing to `session.py` lines 28–45 and a matching log entry.
+
+---
+
+## 10. Debugging the Pipeline
+
+If a query returns unexpected results (e.g. "No similar incident found" for a question about errors in the logs), use these diagnostic tools.
+
+### Inspect indexed data
+
+Confirm what's actually in the vector store:
+
+```sh
+curl -s http://localhost:8000/debug/index/<namespace> | python3 -m json.tool
+```
+
+Returns the total chunk count, a code/log breakdown, and sample entries:
+
+```json
+{
+  "namespace": "d2a64b8f709574d8f1899038",
+  "total_chunks": 22,
+  "source_types": { "code": 2, "log": 20 },
+  "samples": [
+    { "source_file": "logs/app.log", "source_type": "log", "line_start": 6, "text_preview": "ERROR  TypeError..." }
+  ]
+}
+```
+
+### Test retrieval without generating an answer
+
+Run the full semantic + keyword retrieval pipeline and see exactly what's matched:
+
+```sh
+curl -s -X POST http://localhost:8000/debug/retrieval \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Is there any error in the logs?",
+    "namespace": "<namespace>",
+    "top_k": 8
+  }' | python3 -m json.tool
+```
+
+Returns semantic results, keyword results, merged & ranked results, confidence scores, and whether the LLM threshold is met — all without calling the LLM.
+
+### Ask with debug trace
+
+Add `"debug": true` to any `/ask` request:
+
+```sh
+curl -s -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Is there any error in the logs?",
+    "namespace": "<namespace>",
+    "debug": true
+  }' | python3 -m json.tool
+```
+
+The response includes a `debug_trace` array showing every pipeline step with elapsed time (ms).
+
+### SSE streaming (real-time pipeline status)
+
+The UI uses `POST /ask/stream` to show live progress messages. You can test it with curl:
+
+```sh
+curl -s -N -X POST http://localhost:8000/ask/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Is there any error in the logs?",
+    "namespace": "<namespace>"
+  }'
+```
+
+You'll see events like:
+```
+data: {"type": "step", "step": "classify", "message": "Classifying your question..."}
+data: {"type": "step", "step": "retrieve", "message": "Searching 22 indexed documents..."}
+data: {"type": "step", "step": "keyword_search", "message": "Enhancing with keyword search: ERROR, Error"}
+data: {"type": "step", "step": "keyword_done", "message": "Found 8 keyword matches"}
+data: {"type": "result", "data": { ... full response ... }}
+```
+
+In the browser, these appear as live status text in the thinking bubble.
+
+---
+
+## 11. Shut Down
+
+```sh
+docker compose down
+```
+
+Vector database state persists in `vectordb/`. Re-indexing is not required on the next start.
+
+To wipe the vector database and start clean:
+
+```sh
+docker compose down
+rm -rf vectordb/chroma
+docker compose up
+```
+
+---
+
+## Troubleshooting
+
+**Backend exits immediately (code 1)**
+Check that `BAKUP_ACCESS_KEY` is set in `.env` and that `BAKUP_PROJECT_PATH` exists and is a directory.
+
+**`no_data: true` on all queries**
+The index may be empty. Confirm `chunks_stored > 0` in the index response. File types not in the supported list (`.py`, `.js`, `.ts`, `.go`, `.rs`, `.java`, `.md`, `.yaml`, `.sql`, and ~35 others) are skipped. Use `GET /debug/index/<namespace>` to inspect what's actually indexed.
+
+**Log queries return "No similar incident found"**
+Pure embedding search can miss raw log lines containing keywords like `ERROR` or `Exception`. bakup.ai now adds automatic **keyword-enhanced search** for log-style queries. If results are still unexpected:
+1. Run `GET /debug/index/<namespace>` — confirm log files are indexed (look for `"log"` in `source_types`).
+2. Run `POST /debug/retrieval` — check whether semantic and keyword search both return results.
+3. Run `POST /ask` with `"debug": true` — review the `debug_trace` for bottlenecks.
+
+**Low confidence scores**
+This is expected for questions that use terminology not present in the source. Try using exact identifiers, function names, or error strings from the code. For log-related queries, the keyword search pipeline automatically looks for `ERROR`, `Exception`, `Traceback`, `WARN`, `FATAL` and similar terms.
+
+**Model download stuck**
+`all-MiniLM-L6-v2` (~90 MB) downloads on first startup. If it stalls, check your network and retry `docker compose up`. The download is idempotent.
+
+**Port conflict**
+If 8000 or 3000 are in use, override in `docker-compose.yml` under the `ports` key. No application code changes are needed.
+
+---
+
+## Feedback
+
+This is a pre-release build. Expected rough edges include slow first-start times, limited file type coverage, and extractive-only answers when no LLM model file is present.
+
+Feedback goes to the Bakup team directly — contact details are in the landing page footer.

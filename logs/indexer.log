@@ -1,0 +1,66 @@
+2026-03-01T09:15:03Z INFO  IndexWorker started — namespace=bakupai-self root=C:\Users\91876\Documents\bakup.ai
+2026-03-01T09:15:03Z INFO  Walking directory tree...
+2026-03-01T09:15:04Z INFO  Skipping __pycache__ (excluded pattern)
+2026-03-01T09:15:04Z INFO  Skipping .git (excluded pattern)
+2026-03-01T09:15:04Z INFO  Skipping node_modules (excluded pattern)
+2026-03-01T09:15:04Z WARNING Skipping binary: model-weights/all-MiniLM-L6-v2/pytorch_model.bin (148.3MB > 10MB limit)
+2026-03-01T09:15:04Z WARNING Skipping binary: model-weights/all-MiniLM-L6-v2/tokenizer.json (size OK but non-text)
+2026-03-01T09:15:04Z WARNING Skipping binary: vectordb/chroma.sqlite3 (binary database file)
+2026-03-01T09:15:04Z INFO  File walk complete: 22 indexable files found
+
+2026-03-01T09:15:04Z INFO  Chunking phase started
+2026-03-01T09:15:04Z INFO  [1/22] backend/main.py — 2 chunks
+2026-03-01T09:15:04Z INFO  [2/22] backend/config.py — 1 chunk
+2026-03-01T09:15:05Z INFO  [3/22] backend/core/access.py — 1 chunk
+2026-03-01T09:15:05Z INFO  [4/22] backend/core/ingestion/chunker.py — 6 chunks
+2026-03-01T09:15:05Z INFO  [5/22] backend/core/ingestion/file_walker.py — 4 chunks
+2026-03-01T09:15:05Z INFO  [6/22] backend/core/ingestion/log_parser.py — 5 chunks
+2026-03-01T09:15:05Z INFO  [7/22] backend/core/ingestion/github_ingester.py — 3 chunks
+2026-03-01T09:15:05Z INFO  [8/22] backend/core/retrieval/ranker.py — 4 chunks
+2026-03-01T09:15:05Z INFO  [9/22] backend/core/retrieval/search.py — 3 chunks
+2026-03-01T09:15:05Z INFO  [10/22] backend/api/routes.py — 7 chunks
+2026-03-01T09:15:05Z INFO  [11/22] backend/requirements.txt — 1 chunk (plain text)
+2026-03-01T09:15:06Z INFO  [12/22] ui/index.html — 3 chunks
+2026-03-01T09:15:06Z INFO  [13/22] ui/app.js — 11 chunks
+2026-03-01T09:15:06Z INFO  [14/22] ui/styles.css — 8 chunks
+2026-03-01T09:15:06Z INFO  [15/22] ui/fonts.css — 1 chunk
+2026-03-01T09:15:06Z INFO  [16/22] docker-compose.yml — 1 chunk
+2026-03-01T09:15:06Z INFO  [17/22] .env.example — 1 chunk
+2026-03-01T09:15:06Z INFO  Chunking phase complete: 62 total chunks
+
+2026-03-01T09:15:07Z INFO  Embedding phase started — model: all-MiniLM-L6-v2
+2026-03-01T09:15:07Z INFO  Batch 1/2: encoding 32 chunks
+2026-03-01T09:15:09Z INFO  Batch 1/2: done in 1.9s
+2026-03-01T09:15:09Z INFO  Batch 2/2: encoding 30 chunks
+2026-03-01T09:15:11Z INFO  Batch 2/2: done in 1.8s
+2026-03-01T09:15:11Z INFO  Embedding phase complete: 62 vectors (dim=384)
+
+2026-03-01T09:15:11Z INFO  ChromaDB upsert: namespace=bakupai-self count=62
+2026-03-01T09:15:14Z INFO  Upsert complete in 2.4s
+2026-03-01T09:15:14Z INFO  IndexWorker finished — total time: 11.3s
+
+2026-03-01T13:22:10Z INFO  IndexWorker started — namespace=bakupai-self (re-index, incremental=false)
+2026-03-01T13:22:10Z ERROR  core/ingestion/chunker.py line 88 in chunk_file: UnicodeDecodeError
+  Attempted to read: ui/icons/logo.png
+  Encoding: utf-8 — byte 0x89 at position 0 is not valid UTF-8
+  Action: file will be skipped
+2026-03-01T13:22:11Z WARNING 1 file skipped due to encoding errors
+2026-03-01T13:22:11Z INFO  Chunking complete: 61 chunks (1 file skipped)
+2026-03-01T13:22:13Z INFO  Embedding complete: 61 vectors
+2026-03-01T13:22:15Z INFO  ChromaDB upsert: namespace=bakupai-self — replaced 62 vectors with 61
+2026-03-01T13:22:15Z INFO  IndexWorker finished — total time: 5.1s
+
+2026-03-02T14:03:22Z INFO  IndexWorker started — namespace=bakupai-self (re-index)
+2026-03-02T14:03:22Z INFO  File walk: 22 files
+2026-03-02T14:03:23Z INFO  Chunking: 62 chunks
+2026-03-02T14:03:24Z INFO  Batch 1/2: 32 chunks embedded in 1.7s
+2026-03-02T14:03:25Z INFO  Batch 2/2: 30 chunks embedded in 1.6s
+2026-03-02T14:03:26Z INFO  Upsert: 62 vectors into namespace bakupai-self
+2026-03-02T14:03:26Z INFO  IndexWorker finished — total time: 3.1s (model was warm)
+
+2026-03-03T07:55:00Z INFO  IndexWorker started — namespace=bakupai-self (startup pre-warm)
+2026-03-03T07:55:00Z ERROR  core/ingestion/file_walker.py line 41 in walk_project: PermissionError
+  Access is denied: C:\Users\91876\Documents\bakup.ai\vectordb\chroma.sqlite3-wal
+  The process cannot access the file because it is being used by another process
+2026-03-03T07:55:00Z WARNING Skipping locked file: vectordb/chroma.sqlite3-wal
+2026-03-03T07:55:02Z INFO  Pre-warm index complete: 61 chunks indexed (1 locked file skipped)

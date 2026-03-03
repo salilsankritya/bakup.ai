@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BackTraceOps — Local Incident Intelligence</title>
+  <!-- Fonts: system-stack with Inter fallback defined in fonts.css -->
+  <link rel="stylesheet" href="fonts.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR
+  ════════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+
+    <div class="sidebar-header">
+      <div class="brand-mark">
+        <svg class="brand-mark__icon" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="8" height="8" rx="2" fill="currentColor" opacity="0.9"/>
+          <rect x="13" y="3" width="8" height="8" rx="2" fill="currentColor" opacity="0.55"/>
+          <rect x="3" y="13" width="8" height="8" rx="2" fill="currentColor" opacity="0.55"/>
+          <rect x="13" y="13" width="8" height="8" rx="2" fill="currentColor" opacity="0.25"/>
+        </svg>
+        <span class="brand-mark__name">bakup</span>
+        <span class="brand-mark__tag">ai</span>
+      </div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="new-session-btn" id="new-session-btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M8 3v10M3 8h10"/>
+        </svg>
+        New Session
+      </button>
+    </div>
+
+    <div class="sessions-group">
+      <span class="sessions-group__label">Sessions</span>
+      <div class="session-list" id="session-list"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="backend-status" id="backend-status">
+        <span class="status-dot status-dot--checking" id="status-dot"></span>
+        <span class="status-label" id="status-label">Checking…</span>
+      </div>
+      <button class="icon-btn" id="open-index-btn" title="Index a project">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 4h12M2 8h8M2 12h5"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="sidebar-llm-btn" title="Configure AI provider">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/>
+        </svg>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main class="main" id="main">
+
+    <header class="main-header">
+      <div class="main-header__left">
+        <span class="main-header__session-name" id="session-title" title="Click to rename">Untitled Session</span>
+        <span class="main-header__namespace" id="header-namespace"></span>
+      </div>
+      <div class="main-header__actions">
+        <button class="header-btn" id="open-index-btn-header">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="2" width="5" height="5" rx="1"/>
+            <rect x="9" y="2" width="5" height="5" rx="1"/>
+            <rect x="2" y="9" width="5" height="5" rx="1"/>
+            <path d="M11.5 9v5M9 11.5h5"/>
+          </svg>
+          Index Project
+        </button>
+        <div class="backend-status-header">
+          <span class="status-dot status-dot--checking" id="header-status-dot"></span>
+          <span class="status-label" id="header-status-label">Checking…</span>
+        </div>
+        <div class="llm-status-header" id="llm-status-header">
+          <span class="status-dot status-dot--checking" id="llm-status-dot"></span>
+          <span class="status-label" id="llm-status-label">AI…</span>
+          <button class="icon-btn icon-btn--xs" id="llm-setup-btn" title="Configure AI provider">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+              <circle cx="8" cy="8" r="2.5"/>
+              <path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="chat-area" id="chat-area">
+
+      <div class="welcome-state" id="welcome-state">
+        <div class="welcome-icon">
+          <svg viewBox="0 0 48 48" fill="none">
+            <rect x="4" y="4" width="18" height="18" rx="4" fill="currentColor" opacity="0.75"/>
+            <rect x="26" y="4" width="18" height="18" rx="4" fill="currentColor" opacity="0.45"/>
+            <rect x="4" y="26" width="18" height="18" rx="4" fill="currentColor" opacity="0.45"/>
+            <rect x="26" y="26" width="18" height="18" rx="4" fill="currentColor" opacity="0.2"/>
+          </svg>
+        </div>
+        <h2 class="welcome-title">Ask anything about this incident</h2>
+        <p class="welcome-sub">Index a codebase or log file, then ask questions. Bakup finds the relevant code and explains what happened.</p>
+        <div class="welcome-chips">
+          <button class="chip" data-q="What exceptions appear in the logs?">What exceptions appear in the logs?</button>
+          <button class="chip" data-q="Where is session timeout implemented?">Where is session timeout implemented?</button>
+          <button class="chip" data-q="What caused the most recent error?">What caused the most recent error?</button>
+        </div>
+        <button class="welcome-index-btn" id="welcome-index-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+            <path d="M8 3v10M3 8h10"/>
+          </svg>
+          Index a Project First
+        </button>
+      </div>
+
+      <div class="message-list" id="message-list" hidden></div>
+
+    </div>
+
+    <div class="input-area">
+      <div class="input-wrapper">
+        <textarea
+          id="chat-input"
+          class="chat-input"
+          placeholder="Ask a question about this incident…"
+          rows="1"
+          autocomplete="off"
+          spellcheck="true"
+        ></textarea>
+        <button class="send-btn" id="send-btn" disabled title="Send (Ctrl+Enter)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M3 8h10M9 4l4 4-4 4"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint">
+        <span id="input-namespace-hint" class="input-hint__ns">No namespace — index a project first</span>
+        <span class="input-hint__kb">Ctrl+Enter to send</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ═══════════ INDEX PANEL ═══════════ -->
+  <div class="panel-overlay" id="panel-overlay" hidden></div>
+
+  <aside class="index-panel" id="index-panel" aria-hidden="true">
+    <div class="index-panel__header">
+      <span class="index-panel__title">Index a Project</span>
+      <button class="icon-btn" id="close-index-btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 4l8 8M12 4l-8 8"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="index-tabs">
+      <button class="index-tab index-tab--active" data-tab="local">Local Path</button>
+      <button class="index-tab" data-tab="upload">Upload Files</button>
+      <button class="index-tab" data-tab="github">GitHub URL</button>
+    </div>
+
+    <div class="index-tab-panel" id="tab-local">
+      <form id="index-local-form" class="index-form" autocomplete="off" novalidate>
+        <label class="form-label" for="i-path">Project root path</label>
+        <div class="path-picker">
+          <input type="text" id="i-path" class="form-input" placeholder="C:\projects\my-service" spellcheck="false"/>
+          <button type="button" class="browse-btn" id="browse-folder-btn" title="Browse for folder">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M2 5a1 1 0 011-1h4l1.5 1.5H13a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/>
+            </svg>
+            Browse
+          </button>
+          <input type="file" id="folder-picker" webkitdirectory style="display:none"/>
+        </div>
+        <label class="form-label" for="i-log">Log file path <span class="form-optional">optional</span></label>
+        <div class="path-picker">
+          <input type="text" id="i-log" class="form-input" placeholder="C:\projects\my-service\logs\app.log" spellcheck="false"/>
+          <button type="button" class="browse-btn" id="browse-file-btn" title="Browse for log file">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+              <path d="M10 2v4h4"/>
+            </svg>
+            Browse
+          </button>
+          <input type="file" id="file-picker" accept=".log,.txt,*/*" style="display:none"/>
+        </div>
+        <label class="form-label" for="i-namespace">Namespace <span class="form-optional">optional — auto-generated</span></label>
+        <input type="text" id="i-namespace" class="form-input" placeholder="auto-generated" spellcheck="false"/>
+        <button type="submit" class="primary-btn" id="i-submit">Index Project</button>
+      </form>
+    </div>
+
+    <div class="index-tab-panel" id="tab-upload" hidden>
+      <form id="index-upload-form" class="index-form" autocomplete="off" novalidate>
+        <p class="upload-hint">
+          Upload source code and log files directly from your machine.
+          Ideal when running bakup.ai via Docker.
+        </p>
+        <label class="form-label">Source code files <span class="form-optional">optional</span></label>
+        <div class="upload-drop" id="drop-project">
+          <input type="file" id="u-project-files" multiple class="upload-drop__input"/>
+          <span class="upload-drop__label">Drag &amp; drop, or click to select files</span>
+          <span class="upload-drop__count" id="u-project-count"></span>
+        </div>
+        <label class="form-label">Log files <span class="form-optional">.log, .txt, .json</span></label>
+        <div class="upload-drop" id="drop-logs">
+          <input type="file" id="u-log-files" multiple accept=".log,.txt,.json,.csv,.out,.err" class="upload-drop__input"/>
+          <span class="upload-drop__label">Drag &amp; drop, or click to select log files</span>
+          <span class="upload-drop__count" id="u-log-count"></span>
+        </div>
+        <label class="form-label" for="u-namespace">Namespace <span class="form-optional">optional</span></label>
+        <input type="text" id="u-namespace" class="form-input" placeholder="auto-generated" spellcheck="false"/>
+        <button type="submit" class="primary-btn" id="u-submit">Upload &amp; Index</button>
+      </form>
+    </div>
+
+    <div class="index-tab-panel" id="tab-github" hidden>
+      <form id="index-github-form" class="index-form" autocomplete="off" novalidate>
+        <label class="form-label" for="g-url">GitHub repository URL</label>
+        <input type="url" id="g-url" class="form-input" placeholder="https://github.com/org/repo" spellcheck="false"/>
+        <label class="form-label" for="g-branch">Branch <span class="form-optional">optional</span></label>
+        <input type="text" id="g-branch" class="form-input" placeholder="main" spellcheck="false"/>
+        <button type="submit" class="primary-btn" id="g-submit">Clone &amp; Index</button>
+      </form>
+    </div>
+
+    <div class="index-result" id="index-result" hidden>
+      <div class="index-result__inner" id="index-result-inner"></div>
+    </div>
+
+    <div class="panel-loader" id="panel-loader" hidden>
+      <span class="panel-loader__pulse"></span>
+      <span class="panel-loader__msg" id="panel-loader-msg">Indexing…</span>
+    </div>
+  </aside>
+
+  <!-- ═══════════ RENAME MODAL ═══════════ -->
+  <div class="modal-overlay" id="rename-modal" hidden>
+    <div class="modal">
+      <div class="modal__header">
+        <span class="modal__title">Rename session</span>
+        <button class="icon-btn" id="close-rename-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 4l8 8M12 4l-8 8"/>
+          </svg>
+        </button>
+      </div>
+      <input type="text" class="form-input" id="rename-input" placeholder="Session name" maxlength="60"/>
+      <div class="modal__actions">
+        <button class="primary-btn" id="rename-confirm-btn">Rename</button>
+        <button class="ghost-btn" id="rename-cancel-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ LLM SETUP MODAL ═══════════ -->
+  <div class="modal-overlay" id="llm-setup-modal" hidden>
+    <div class="modal modal--setup">
+      <div class="modal__header">
+        <span class="modal__title">Configure AI Provider</span>
+        <button class="icon-btn" id="close-llm-setup-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 4l8 8M12 4l-8 8"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="setup-privacy-notice">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 016 0v2"/>
+        </svg>
+        Your API key is stored <strong>locally only</strong> and is never logged or transmitted except directly to your chosen provider.
+      </p>
+
+      <form id="llm-setup-form" autocomplete="off" novalidate>
+        <label class="form-label" for="llm-provider">Provider</label>
+        <select class="form-input" id="llm-provider">
+          <option value="openai">OpenAI</option>
+          <option value="azure_openai">Azure OpenAI</option>
+          <option value="ollama">Ollama (local, no key needed)</option>
+        </select>
+
+        <label class="form-label" for="llm-model">Model</label>
+        <input type="text" id="llm-model" class="form-input" placeholder="gpt-4o-mini" spellcheck="false"/>
+
+        <div class="setup-field-group" id="llm-key-group">
+          <label class="form-label" for="llm-api-key">API Key</label>
+          <input type="password" id="llm-api-key" class="form-input" placeholder="sk-…" autocomplete="new-password" spellcheck="false"/>
+        </div>
+
+        <div class="setup-field-group" id="llm-azure-group" hidden>
+          <label class="form-label" for="llm-azure-endpoint">Azure Endpoint</label>
+          <input type="text" id="llm-azure-endpoint" class="form-input" placeholder="https://my-resource.openai.azure.com" spellcheck="false"/>
+          <label class="form-label" for="llm-azure-version">API Version</label>
+          <input type="text" id="llm-azure-version" class="form-input" value="2024-02-01" spellcheck="false"/>
+        </div>
+
+        <div class="setup-field-group" id="llm-ollama-group" hidden>
+          <label class="form-label" for="llm-ollama-url">Ollama Base URL</label>
+          <input type="text" id="llm-ollama-url" class="form-input" value="http://localhost:11434" spellcheck="false"/>
+        </div>
+
+        <div class="setup-test-row">
+          <button type="button" class="ghost-btn" id="llm-test-btn">Test Connection</button>
+          <span class="setup-test-result" id="llm-test-result" hidden></span>
+        </div>
+
+        <div class="modal__actions">
+          <button type="submit" class="primary-btn" id="llm-save-btn">Save &amp; Activate</button>
+          <button type="button" class="ghost-btn" id="llm-skip-btn">Skip for now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="loader-overlay" id="loader" hidden>
+    <div class="loader__spinner"></div>
+    <span class="loader__msg" id="loader-msg">Working…</span>
+  </div>
+
+</div><!-- /.app -->
+<script src="app.js"></script>
+</body>
+</html>
