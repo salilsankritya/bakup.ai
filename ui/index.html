@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BackTraceOps — Local Incident Intelligence</title>
+  <title>bakup.ai — Local Incident Intelligence</title>
   <!-- Fonts: system-stack with Inter fallback defined in fonts.css -->
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -109,11 +109,11 @@
             <rect x="26" y="26" width="18" height="18" rx="4" fill="currentColor" opacity="0.2"/>
           </svg>
         </div>
-        <h2 class="welcome-title">Ask anything about this incident</h2>
-        <p class="welcome-sub">Index a codebase or log file, then ask questions. Bakup finds the relevant code and explains what happened.</p>
+        <h2 class="welcome-title">Ask anything about your project</h2>
+        <p class="welcome-sub">Index a codebase or log folder, then ask questions. Bakup ingests files recursively, identifies errors across multiple log files, and returns structured summaries with confidence scoring.</p>
         <div class="welcome-chips">
-          <button class="chip" data-q="What exceptions appear in the logs?">What exceptions appear in the logs?</button>
-          <button class="chip" data-q="Where is session timeout implemented?">Where is session timeout implemented?</button>
+          <button class="chip" data-q="What errors appear across all log files?">What errors appear across all log files?</button>
+          <button class="chip" data-q="Which files have the most failures?">Which files have the most failures?</button>
           <button class="chip" data-q="What caused the most recent error?">What caused the most recent error?</button>
         </div>
         <button class="welcome-index-btn" id="welcome-index-btn">
@@ -133,7 +133,7 @@
         <textarea
           id="chat-input"
           class="chat-input"
-          placeholder="Ask a question about this incident…"
+          placeholder="Ask a question about your project or logs…"
           rows="1"
           autocomplete="off"
           spellcheck="true"
@@ -146,7 +146,7 @@
       </div>
       <div class="input-hint">
         <span id="input-namespace-hint" class="input-hint__ns">No namespace — index a project first</span>
-        <span class="input-hint__kb">Ctrl+Enter to send</span>
+        <span class="input-hint__kb">Enter to send · Shift+Enter for newline</span>
       </div>
     </div>
 
@@ -184,9 +184,9 @@
           </button>
           <input type="file" id="folder-picker" webkitdirectory style="display:none"/>
         </div>
-        <label class="form-label" for="i-log">Log file path <span class="form-optional">optional</span></label>
+        <label class="form-label" for="i-log">Log folder or file path <span class="form-optional">optional — folders are scanned recursively</span></label>
         <div class="path-picker">
-          <input type="text" id="i-log" class="form-input" placeholder="C:\projects\my-service\logs\app.log" spellcheck="false"/>
+          <input type="text" id="i-log" class="form-input" placeholder="C:\projects\my-service\logs" spellcheck="false"/>
           <button type="button" class="browse-btn" id="browse-file-btn" title="Browse for log file">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M4 2h6l4 4v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
@@ -206,7 +206,7 @@
       <form id="index-upload-form" class="index-form" autocomplete="off" novalidate>
         <p class="upload-hint">
           Upload source code and log files directly from your machine.
-          Ideal when running bakup.ai via Docker.
+          Logs are analyzed for severity, cross-file error distribution, and recurring patterns.
         </p>
         <label class="form-label">Source code files <span class="form-optional">optional</span></label>
         <div class="upload-drop" id="drop-project">
@@ -281,7 +281,7 @@
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
           <rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 016 0v2"/>
         </svg>
-        Your API key is stored <strong>locally only</strong> and is never logged or transmitted except directly to your chosen provider.
+        Your API key is stored <strong>locally only</strong> and is never logged or transmitted except directly to your chosen provider. All log analysis runs entirely on your machine.
       </p>
 
       <form id="llm-setup-form" autocomplete="off" novalidate>
