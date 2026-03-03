@@ -13,7 +13,7 @@ Every response includes:
   - answer          Plain-text answer, clarification, or scope message
   - confidence      Float [0, 1] — score of the best-matching source
   - no_data         True when no relevant content was found
-  - mode            "extractive" | "llm" | "greeting" | "off_topic" | "clarification"
+  - mode            "extractive" | "llm" | "greeting" | "conversational" | "off_topic" | "clarification"
   - sources         List of cited chunks with file, line, and confidence
   - debug_trace     (optional) Step-by-step pipeline trace when debug=true
 """
@@ -54,7 +54,7 @@ class QueryResponse(BaseModel):
     answer: str
     confidence: float
     no_data: bool
-    mode: str               # "extractive" | "llm" | "greeting" | "off_topic" | "clarification"
+    mode: str               # "extractive" | "llm" | "greeting" | "conversational" | "off_topic" | "clarification"
     sources: List[SourceModel]
     debug_trace: Optional[List[dict]] = None   # Step-by-step trace when debug=true
 
@@ -128,7 +128,7 @@ async def ask(body: QueryRequest) -> QueryResponse:
     from core.classifier.query_classifier import classify_query, QueryCategory
 
     category = classify_query(body.question)
-    if category in (QueryCategory.GREETING, QueryCategory.OFF_TOPIC):
+    if category in (QueryCategory.GREETING, QueryCategory.CONVERSATIONAL, QueryCategory.OFF_TOPIC):
         from core.retrieval.rag import answer_question as _answer
         result = _answer(
             question=body.question,
@@ -209,6 +209,27 @@ async def ask_stream(body: QueryRequest):
                 result = await loop.run_in_executor(
                     None, partial(answer_question, body.question, "_", 1, True)
                 )
+                yield sse_result(_response_to_dict(result))
+                return
+
+            if category == QueryCategory.CONVERSATIONAL:
+                yield sse_step("classify_done", "Conversational question — no retrieval needed")
+                yield sse_step("llm_direct", "Responding directly...")
+                from core.llm.llm_service import get_llm_service
+                svc = get_llm_service()
+                llm_resp = await loop.run_in_executor(
+                    None, partial(svc.generate_conversational, body.question)
+                )
+                yield sse_step("llm_done", f"Response ready ({llm_resp.mode})")
+                from core.retrieval.rag import RAGResponse
+                result = RAGResponse(
+                    answer=llm_resp.answer,
+                    confidence=1.0,
+                    no_data=False,
+                    mode="conversational",
+                    sources=[],
+                )
+                yield sse_step("complete", "Done!")
                 yield sse_result(_response_to_dict(result))
                 return
 

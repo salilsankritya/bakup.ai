@@ -5,9 +5,10 @@ Classifies incoming user questions into one of three categories BEFORE any
 retrieval or LLM call is made.
 
 Categories:
-    project   — about indexed code, logs, incidents, project structure, files
-    greeting  — conversational pleasantries (hi, how are you, thanks, etc.)
-    off_topic — clearly unrelated to the project (physics, politics, recipes…)
+    project        — about indexed code, logs, incidents, project structure, files
+    greeting       — short pleasantries (hi, how are you, thanks, etc.)
+    conversational — personal / meta / casual questions (LLM responds directly)
+    off_topic      — clearly unrelated to the project (physics, politics, recipes…)
 
 The classifier is a lightweight keyword / pattern matcher — no LLM call
 required, no latency.  It runs in < 1 ms and is the very first step in the
@@ -27,9 +28,10 @@ from typing import Optional
 
 
 class QueryCategory(str, Enum):
-    PROJECT   = "project"       # About indexed data — route to RAG
-    GREETING  = "greeting"      # Conversational — short polite reply
-    OFF_TOPIC = "off_topic"     # Unrelated to project — scope guard
+    PROJECT        = "project"        # About indexed data — route to RAG
+    GREETING       = "greeting"       # Short pleasantries — canned polite reply
+    CONVERSATIONAL = "conversational" # Personal/meta/casual — LLM direct call
+    OFF_TOPIC      = "off_topic"      # Unrelated to project — scope guard
 
 
 # ── Keyword banks ──────────────────────────────────────────────────────────────
@@ -111,24 +113,55 @@ _OFF_TOPIC_SIGNALS: list[re.Pattern] = [
     ]
 ]
 
+# Conversational / meta / personal — caught before the ambiguous weak-project
+# signals so "are you gay" or "tell me a joke" go to the LLM instead of retrieval.
+_CONVERSATIONAL_PATTERNS: list[re.Pattern] = [
+    re.compile(p, re.IGNORECASE) for p in [
+        # Personal questions directed at the AI
+        r"^are\s+you\s+(?:a\s+)?\w+",            # "are you gay", "are you a bot"
+        r"^do\s+you\s+(like|love|hate|feel|think|believe|dream|eat|sleep|remember)",
+        r"^can\s+you\s+(feel|think|dream|love|sing|dance|laugh|cry|joke|play|flirt)",
+        r"^(who|what)\s+(made|created|built|trained|programmed|designed)\s+you",
+        r"^how\s+old\s+are\s+you",
+        r"^what('?s|\s+is)\s+your\s+(name|age|gender|sex|fav|favorite|opinion|problem|purpose|job)",
+        r"^(tell|say)\s+(me\s+)?(a\s+)?(joke|story|fun\s*fact|something\s+(funny|interesting|cool))",
+        r"^i\s+(love|hate|like|miss|need|want)\s+you",
+        r"^you('re|\s+are)\s+\w+",                # "you're stupid", "you are great"
+        r"^do\s+you\s+have\s+(?:a\s+)?(?:boyfriend|girlfriend|wife|husband|body|soul|mind|brain|feelings?|emotions?|consciousness|name|age|life|family|friends?)",
+        # Short reactions / fillers
+        r"^(lol|haha|rofl|lmao|omg|bruh|bro|dude|wow|nice|hmm+|meh|ugh|yikes|oops|ha+)[\s!?.]*$",
+        r"^(ok|okay|sure|yes|no|nah|nope|yep|yeah|yea|k|kk|alright|cool|fine|whatever|great)[\s!?.]*$",
+        # Non-project requests
+        r"^(sing|dance|rap|beatbox|flirt|marry)",
+        r"^(write|compose|make)\s+(me\s+)?(a\s+)?(poem|song|haiku|limerick|rap|joke|riddle)",
+        # General capability
+        r"^what\s+can\s+you\s+do",
+        # Provocative / profanity (professional deflection, not retrieval)
+        r"^(f+u+c+k+|sh+i+t+|damn|wtf|stfu|shut\s+up)",
+    ]
+]
+
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def classify_query(question: str) -> QueryCategory:
     """
-    Classify *question* into project / greeting / off_topic.
+    Classify *question* into project / greeting / conversational / off_topic.
 
     Fast (regex-only, < 1 ms). No LLM call.
 
     Priority:
-        1. If it matches greeting patterns exactly  → GREETING
+        1. If it matches greeting patterns exactly   → GREETING
         2. If it matches STRONG project signals      → PROJECT
         3. If it matches off-topic signals           → OFF_TOPIC
-        4. If it matches WEAK project signals        → PROJECT
-        5. Default                                   → PROJECT (benefit of the doubt)
+        4. If it matches conversational patterns     → CONVERSATIONAL
+        5. If it matches WEAK project signals        → PROJECT
+        6. Default                                   → CONVERSATIONAL (LLM handles naturally)
 
-    The two-tier split prevents generic verbs like "explain" from
-    overriding clearly off-topic questions ("Explain quantum physics").
+    The two-tier split prevents generic verbs like \"explain\" from
+    overriding clearly off-topic questions (\"Explain quantum physics\").
+    Conversational patterns (step 4) catch personal / meta queries like
+    \"are you gay\" before they fall through to retrieval.
     """
     q = question.strip()
     if not q:
@@ -150,13 +183,20 @@ def classify_query(question: str) -> QueryCategory:
         if pat.search(q):
             return QueryCategory.OFF_TOPIC
 
-    # 4. Weak project signal — generic question words (explain, how, why…)
+    # 4. Conversational / meta — personal questions, casual chat, identity
+    for pat in _CONVERSATIONAL_PATTERNS:
+        if pat.search(q):
+            return QueryCategory.CONVERSATIONAL
+
+    # 5. Weak project signal — generic question words (explain, how, why…)
     for pat in _PROJECT_WEAK:
         if pat.search(q):
             return QueryCategory.PROJECT
 
-    # 5. Default: assume project-related (benefit of the doubt)
-    return QueryCategory.PROJECT
+    # 6. Default: conversational — if nothing matches, let the LLM handle
+    #    it naturally instead of forcing through retrieval where the results
+    #    would be irrelevant.
+    return QueryCategory.CONVERSATIONAL
 
 
 def greeting_response() -> str:
@@ -174,6 +214,16 @@ def off_topic_response() -> str:
         "bakup.ai focuses on indexed project data — including source code, "
         "log files, and incident traces. Try asking about an error, "
         "a specific file, or a recent log event."
+    )
+
+
+def conversational_response() -> str:
+    """Fallback when LLM is not configured for conversational questions."""
+    return (
+        "I'm bakup.ai, a project-scoped incident intelligence assistant. "
+        "I'm best at helping you investigate errors, search through logs, "
+        "and understand your codebase. "
+        "Try asking about an error, a specific file, or a recent log event!"
     )
 
 

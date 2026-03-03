@@ -269,6 +269,52 @@ class LLMService:
             sources=self._serialise_sources(log_chunks[:5]),
         )
 
+    def generate_conversational(self, question: str) -> LLMResponse:
+        """
+        Handle conversational/meta/personal questions by calling the LLM
+        directly — no retrieval context is provided.
+
+        Falls back to a canned response if the LLM is not configured.
+        """
+        from core.llm.prompt_templates import SYSTEM_CONVERSATIONAL
+        from core.classifier.query_classifier import conversational_response
+
+        print(f"  [bakup:debug] generate_conversational: {question[:80]!r}")
+
+        cfg = load_config()
+        if not cfg.configured:
+            print("  [bakup:debug] LLM not configured — canned conversational response")
+            return LLMResponse(
+                answer=conversational_response(),
+                mode="conversational",
+                provider="none",
+                model="none",
+            )
+
+        print(f"  [bakup:debug] LLM call: conversational ({cfg.provider}/{cfg.model})")
+
+        try:
+            raw = self._call_provider(cfg, question, system_prompt=SYSTEM_CONVERSATIONAL)
+        except Exception as exc:
+            safe_msg = _redact_key(str(exc), cfg.api_key)
+            print(f"  [bakup:debug] LLM conversational call failed: {safe_msg}")
+            return LLMResponse(
+                answer=conversational_response(),
+                mode="conversational",
+                provider=cfg.provider,
+                model=cfg.model,
+                error="LLM call failed — showing default response.",
+            )
+
+        print(f"  [bakup:debug] LLM conversational response ({len(raw)} chars)")
+
+        return LLMResponse(
+            answer=raw.strip(),
+            mode="conversational",
+            provider=cfg.provider,
+            model=cfg.model,
+        )
+
     def _log_extractive_fallback(self, chunks: list) -> LLMResponse:
         """When LLM is not configured, show log entries directly."""
         if not chunks:

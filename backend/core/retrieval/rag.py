@@ -222,6 +222,7 @@ def answer_question(
 
     if category == QueryCategory.GREETING:
         _step("response", "Greeting detected — returning polite response")
+        print(f"  [bakup:debug] classification=greeting | docs_retrieved=0 | llm_called=no")
         return _result(RAGResponse(
             answer=greeting_response(),
             confidence=1.0,
@@ -230,8 +231,24 @@ def answer_question(
             sources=[],
         ))
 
+    if category == QueryCategory.CONVERSATIONAL:
+        _step("response", "Conversational/meta — calling LLM directly (no retrieval)")
+        from core.llm.llm_service import get_llm_service
+        svc = get_llm_service()
+        llm_resp = svc.generate_conversational(question)
+        _step("llm_direct", f"LLM responded (mode={llm_resp.mode}, {len(llm_resp.answer)} chars)")
+        print(f"  [bakup:debug] classification=conversational | docs_retrieved=0 | llm_called={'yes' if llm_resp.mode == 'conversational' else 'no'}")
+        return _result(RAGResponse(
+            answer=llm_resp.answer,
+            confidence=1.0,
+            no_data=False,
+            mode="conversational",
+            sources=[],
+        ))
+
     if category == QueryCategory.OFF_TOPIC:
         _step("response", "Off-topic detected — returning scope guard")
+        print(f"  [bakup:debug] classification=off_topic | docs_retrieved=0 | llm_called=no")
         return _result(RAGResponse(
             answer=off_topic_response(),
             confidence=0.0,
@@ -358,6 +375,7 @@ def answer_question(
     svc      = get_llm_service()
     llm_resp = svc.generate_response(relevant, question)
     _step("generate_done", f"Answer generated (mode={llm_resp.mode})")
+    print(f"  [bakup:debug] classification=project | docs_retrieved={len(ranked)} | llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
 
     return _result(RAGResponse(
         answer     = llm_resp.answer,
