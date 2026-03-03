@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bakup.ai — Local-First Incident Intelligence</title>
-  <meta name="description" content="Bakup.ai reads your codebase and logs locally, then answers incident questions with cited sources and confidence scores. No data leaves your machine." />
+  <meta name="description" content="Bakup.ai ingests your codebase and log folders locally, analyzes errors across multiple files with severity tagging, and returns structured summaries with confidence scores. No data leaves your machine." />
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -32,9 +32,10 @@
           Without leaving your laptop.
         </h1>
         <p class="hero__sub">
-          Bakup.ai reads your codebase and logs locally, then answers questions
-          about what went wrong, what changed, and what was done before —
-          with file references and confidence scores attached to every answer.
+          Bakup.ai recursively ingests your codebase and log folders locally,
+          analyzes errors across multiple files with severity tagging, and returns
+          structured summaries — with file references and confidence scores
+          attached to every answer.
         </p>
         <div class="hero__cta">
           <a href="#preview" class="btn btn--primary">Request Developer Preview Access</a>
@@ -58,13 +59,14 @@
           <span class="step__num">01</span>
           <h3 class="step__title">Point it at your project</h3>
           <p class="step__body">
-            Provide a local path to your codebase. Bakup reads your source files
-            and recent logs in read-only mode. Nothing is indexed remotely.
+            Provide a local path to your codebase and log folder. Bakup
+            recursively scans source files and log directories in read-only
+            mode — tagging each entry by severity. Nothing is indexed remotely.
             Nothing leaves disk.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">$</span>
-            <span class="terminal__cmd">bakup index --path /your/project</span>
+            <span class="terminal__cmd">bakup index --path /your/project --logs /your/project/logs</span>
           </div>
         </div>
 
@@ -72,8 +74,9 @@
           <span class="step__num">02</span>
           <h3 class="step__title">Ask what happened</h3>
           <p class="step__body">
-            Type a question in plain English. Bakup searches across your local
-            project context to find relevant matches across code and logs.
+            Type a question in plain English. Bakup searches across your code
+            and all indexed log files — correlating errors across multiple
+            sources to surface the most relevant matches.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">$</span>
@@ -83,11 +86,12 @@
 
         <div class="step">
           <span class="step__num">03</span>
-          <h3 class="step__title">Get an answer with citations</h3>
+          <h3 class="step__title">Get a structured summary with citations</h3>
           <p class="step__body">
-            Responses reference the specific files, functions, and log lines that
-            informed the answer. A confidence score is attached to every result.
-            You decide what to act on.
+            Responses include a structured summary referencing the specific files,
+            functions, and log lines that informed the answer — with cross-file
+            error distribution and a multi-factor confidence score. You decide
+            what to act on.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">&gt;</span>
@@ -111,7 +115,42 @@
       </div>
     </div>
   </section>
-
+  <!-- ─── CAPABILITIES ─────────────────────────────────────────────────────── -->
+  <section class="section" id="capabilities">
+    <div class="container">
+      <h2 class="section__title">What the engine does</h2>
+      <div class="trust__pillars">
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3 class="pillar__title">Recursive log folder ingestion</h3>
+          <p class="pillar__body">Point Bakup at a directory. It walks every subfolder, finds <code>.log</code> and <code>.out</code> files, and indexes each entry individually.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+          </div>
+          <h3 class="pillar__title">Cross-file error aggregation</h3>
+          <p class="pillar__body">Errors are correlated across multiple log files. The response tells you which files are affected, how errors are distributed, and where the dominant failure source is.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3 class="pillar__title">Severity-aware analysis</h3>
+          <p class="pillar__body">Each log entry is automatically tagged as <code>error</code>, <code>warning</code>, or <code>info</code> at ingestion time. Retrieval and scoring prioritize higher-severity results.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <h3 class="pillar__title">Structured summaries with confidence</h3>
+          <p class="pillar__body">Answers include a multi-factor confidence score weighing similarity, error volume, severity, recency, pattern consistency, and cross-file corroboration.</p>
+        </div>
+      </div>
+    </div>
+  </section>
   <!-- ─── SECURITY ─────────────────────────────────────────────────────────── -->
   <section class="section section--trust" id="security">
     <div class="container">
@@ -156,8 +195,9 @@
         </div>
       </div>
       <p class="trust__footnote">
-        This website is the only component of Bakup that lives on a server.
-        The tool itself has no server-side dependency.
+        Today, Bakup runs entirely on your machine. A managed cloud mode is on
+        the roadmap — but local-first will always remain the default.
+        The tool has no server-side dependency.
       </p>
     </div>
   </section>
@@ -174,10 +214,10 @@
             engineers for early testing and feedback.
           </p>
           <p class="preview__body">
-            It works. The core analysis, citation, and confidence-scoring features
-            are operational. The installation experience is minimal and the
-            interface is sparse. This is intentional — we are testing the engine,
-            not the wrapper.
+            It works. Recursive folder ingestion, cross-file error aggregation,
+            severity tagging, and multi-factor confidence scoring are operational.
+            The installation experience is minimal and the interface is sparse.
+            This is intentional — we are testing the engine, not the wrapper.
           </p>
           <ul class="preview__list">
             <li><strong>What this is:</strong> A working local binary. A real answer to the question: does this actually help during an incident?</li>
@@ -285,7 +325,7 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">3</div>
           <div class="qs__body">
-            <p class="qs__desc">Index your project and an incident log. Returns a namespace you use to query.</p>
+            <p class="qs__desc">Index your project and log folder. Bakup scans recursively and tags log entries by severity. Returns a namespace you use to query.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
@@ -294,7 +334,7 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
               </div>
               <pre class="code-block__pre"><code>curl -s -X POST http://localhost:8000/index \
   -H <span class="code-string">"Content-Type: application/json"</span> \
-  -d <span class="code-string">'{"path":"/your/project","log_path":"/your/project/logs/app.log"}'</span></code></pre>
+  -d <span class="code-string">'{"path":"/your/project","log_path":"/your/project/logs"}'</span></code></pre>
             </div>
           </div>
         </li>
