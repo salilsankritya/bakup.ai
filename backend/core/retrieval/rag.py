@@ -64,6 +64,9 @@ from core.classifier.query_classifier import (
 from core.embeddings.embedder import embed_query
 from core.retrieval.ranker import RankedResult, has_relevant_results, rank_results, top_relevant
 from core.retrieval.vector_store import query_chunks, keyword_search, collection_count
+from core.analysis.confidence import calculate_confidence, is_broad_query
+from core.analysis.trends import analyze_error_trends
+from core.analysis.clusters import cluster_log_events
 
 # Signal the LLM must produce when it cannot answer from context
 _NO_ANSWER_SIGNAL = "NO_ANSWER"
@@ -307,38 +310,51 @@ def answer_question(
     # ── Step 4: Threshold check ───────────────────────────────────────────────
     if not has_relevant_results(ranked):
         if ranked:
-            # ── Log queries: summarise log entries instead of giving up ────────
+            # ── Log queries: analyse + summarise log entries instead of giving up
             if is_log_q:
                 log_entries = [r for r in ranked if r.source_type == "log"]
-                if log_entries:
-                    _step("log_summarize",
-                          f"Low confidence but {len(log_entries)} log entries found — "
-                          "asking LLM to summarise errors...")
-                    from core.llm.llm_service import get_llm_service
-                    svc = get_llm_service()
-                    llm_resp = svc.generate_log_summary(question, log_entries[:_LLM_CONTEXT_RESULTS])
-                    return _result(RAGResponse(
-                        answer=llm_resp.answer,
-                        confidence=ranked[0].confidence,
-                        no_data=llm_resp.no_data,
-                        mode=llm_resp.mode,
-                        sources=_build_sources(log_entries[:5]),
-                    ))
-                else:
-                    # Log query but no log-type entries found — pass all ranked
-                    _step("log_summarize",
-                          f"Log query but only code entries found — "
-                          "asking LLM to summarise what's available...")
-                    from core.llm.llm_service import get_llm_service
-                    svc = get_llm_service()
-                    llm_resp = svc.generate_log_summary(question, ranked[:_LLM_CONTEXT_RESULTS])
-                    return _result(RAGResponse(
-                        answer=llm_resp.answer,
-                        confidence=ranked[0].confidence,
-                        no_data=llm_resp.no_data,
-                        mode=llm_resp.mode,
-                        sources=_build_sources(ranked[:5]),
-                    ))
+                analysis_chunks = log_entries if log_entries else ranked
+
+                # ── Run analysis pipeline ─────────────────────────────────
+                _step("trend_analysis", f"Detecting error trends across {len(analysis_chunks)} chunks...")
+                trend_report = analyze_error_trends(analysis_chunks)
+                _step("trend_done",
+                      f"Trends: {trend_report.hourly_counts.total_errors} errors, "
+                      f"{len(trend_report.spikes)} spikes, "
+                      f"{len(trend_report.repeating_failures)} repeating failures",
+                      trends=trend_report.to_dict())
+
+                _step("cluster_analysis", "Clustering log events by temporal proximity and keywords...")
+                cluster_report = cluster_log_events(analysis_chunks)
+                _step("cluster_done",
+                      f"Found {cluster_report.cluster_count} incident cluster(s)",
+                      clusters=cluster_report.to_dict())
+
+                _step("confidence_scoring", "Computing multi-factor confidence score...")
+                conf_result = calculate_confidence(analysis_chunks, question=question)
+                _step("confidence_done",
+                      f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})",
+                      confidence=conf_result.to_dict())
+
+                _step("log_summarize",
+                      f"Low embedding confidence but {len(analysis_chunks)} log entries found — "
+                      "passing enriched context to LLM for structured summary...")
+                from core.llm.llm_service import get_llm_service
+                svc = get_llm_service()
+                llm_resp = svc.generate_log_summary(
+                    question,
+                    analysis_chunks[:_LLM_CONTEXT_RESULTS],
+                    trend_summary=trend_report.summary_text(),
+                    cluster_summary=cluster_report.summary_text(),
+                    confidence_summary=conf_result.reasoning,
+                )
+                return _result(RAGResponse(
+                    answer=llm_resp.answer,
+                    confidence=conf_result.confidence_score,
+                    no_data=llm_resp.no_data,
+                    mode=llm_resp.mode,
+                    sources=_build_sources(analysis_chunks[:5]),
+                ))
 
             # ── Non-log queries: ask for clarification ────────────────────────
             _step("clarify", "Low confidence — asking LLM for clarification...")
@@ -369,6 +385,50 @@ def answer_question(
 
     # ── Step 5: Generate answer from relevant results ─────────────────────────
     relevant = top_relevant(ranked, n=_LLM_CONTEXT_RESULTS)
+
+    # ── For log queries, run the analysis pipeline even when confidence is high
+    if is_log_q:
+        _step("trend_analysis", f"Detecting error trends across {len(relevant)} chunks...")
+        trend_report = analyze_error_trends(relevant)
+        _step("trend_done",
+              f"Trends: {trend_report.hourly_counts.total_errors} errors, "
+              f"{len(trend_report.spikes)} spikes, "
+              f"{len(trend_report.repeating_failures)} repeating failures",
+              trends=trend_report.to_dict())
+
+        _step("cluster_analysis", "Clustering log events by temporal proximity and keywords...")
+        cluster_report = cluster_log_events(relevant)
+        _step("cluster_done",
+              f"Found {cluster_report.cluster_count} incident cluster(s)",
+              clusters=cluster_report.to_dict())
+
+        _step("confidence_scoring", "Computing multi-factor confidence score...")
+        conf_result = calculate_confidence(relevant, question=question)
+        _step("confidence_done",
+              f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})",
+              confidence=conf_result.to_dict())
+
+        _step("generate", f"Generating structured log analysis from {len(relevant)} chunks...")
+        from core.llm.llm_service import get_llm_service
+        svc = get_llm_service()
+        llm_resp = svc.generate_log_summary(
+            question,
+            relevant,
+            trend_summary=trend_report.summary_text(),
+            cluster_summary=cluster_report.summary_text(),
+            confidence_summary=conf_result.reasoning,
+        )
+        _step("generate_done", f"Log analysis generated (mode={llm_resp.mode})")
+        print(f"  [bakup:debug] classification=project(log) | docs_retrieved={len(ranked)} | llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
+
+        return _result(RAGResponse(
+            answer=llm_resp.answer,
+            confidence=conf_result.confidence_score,
+            no_data=llm_resp.no_data,
+            mode=llm_resp.mode,
+            sources=_build_sources(relevant),
+        ))
+
     _step("generate", f"Generating answer from {len(relevant)} relevant chunks...")
 
     from core.llm.llm_service import get_llm_service

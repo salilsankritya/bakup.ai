@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import Iterator, List
 
 from core.ingestion.chunker import Chunk, chunk_file
+from core.ingestion.log_parser import parse_log_file
+
+# Extensions that are treated as log files and parsed with the log parser
+LOG_EXTENSIONS: frozenset = frozenset({".log"})
 
 # Directories to skip entirely — generated, vendored, or irrelevant
 SKIP_DIRS: frozenset = frozenset({
@@ -43,6 +47,8 @@ TEXT_EXTENSIONS: frozenset = frozenset({
     ".sql", ".graphql", ".proto",
     # Web
     ".html", ".css", ".scss",
+    # Logs
+    ".log",
 })
 
 # Hard limit: skip files larger than this (bytes)
@@ -92,7 +98,16 @@ def walk_project(project_root: Path) -> Iterator[Chunk]:
             except OSError:
                 continue
 
-            yield from chunk_file(filepath, root, source_type="code")
+            # Route log files through the log parser for per-entry chunking
+            if _is_log_file(filepath):
+                yield from parse_log_file(filepath, root)
+            else:
+                yield from chunk_file(filepath, root, source_type="code")
+
+
+def _is_log_file(filepath: Path) -> bool:
+    """True if the file should be parsed with the log parser."""
+    return filepath.suffix.lower() in LOG_EXTENSIONS
 
 
 def list_indexed_files(project_root: Path) -> List[str]:

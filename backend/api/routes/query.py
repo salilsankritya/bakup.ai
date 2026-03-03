@@ -313,40 +313,120 @@ async def ask_stream(body: QueryRequest):
 
             # ── Step 7: Generate answer ───────────────────────────────────────
             from core.llm.llm_service import get_llm_service
+            is_log_q = _is_log_query(body.question)
 
             if has_relevant_results(ranked):
                 relevant = top_relevant(ranked, n=5)
-                yield sse_step("generate", f"Generating answer from {len(relevant)} sources...")
-                svc = get_llm_service()
-                llm_resp = await loop.run_in_executor(
-                    None, partial(svc.generate_response, relevant, body.question)
-                )
-                yield sse_step("generate_done", f"Answer ready ({llm_resp.mode})")
 
-                from core.retrieval.rag import _build_sources, RAGResponse
-                result = RAGResponse(
-                    answer=llm_resp.answer,
-                    confidence=relevant[0].confidence,
-                    no_data=llm_resp.no_data,
-                    mode=llm_resp.mode,
-                    sources=_build_sources(relevant),
-                )
+                # ── Run analysis pipeline for log queries ─────────────────
+                if is_log_q:
+                    from core.analysis.trends import analyze_error_trends
+                    from core.analysis.clusters import cluster_log_events
+                    from core.analysis.confidence import calculate_confidence
 
-            elif ranked and _is_log_query(body.question):
+                    yield sse_step("trend_analysis", "Detecting error trends...")
+                    trend_report = await loop.run_in_executor(
+                        None, analyze_error_trends, relevant)
+                    yield sse_step("trend_done",
+                        f"{trend_report.hourly_counts.total_errors} errors, "
+                        f"{len(trend_report.spikes)} spikes, "
+                        f"{len(trend_report.repeating_failures)} repeating failures")
+
+                    yield sse_step("cluster_analysis", "Clustering log events...")
+                    cluster_report = await loop.run_in_executor(
+                        None, cluster_log_events, relevant)
+                    yield sse_step("cluster_done",
+                        f"Found {cluster_report.cluster_count} incident cluster(s)")
+
+                    yield sse_step("confidence_scoring", "Computing multi-factor confidence...")
+                    conf_result = await loop.run_in_executor(
+                        None, partial(calculate_confidence, relevant, "auto", body.question))
+                    yield sse_step("confidence_done",
+                        f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})")
+
+                    yield sse_step("generate", f"Generating structured log analysis from {len(relevant)} sources...")
+                    svc = get_llm_service()
+                    llm_resp = await loop.run_in_executor(
+                        None, partial(
+                            svc.generate_log_summary, body.question, relevant,
+                            trend_report.summary_text(),
+                            cluster_report.summary_text(),
+                            conf_result.reasoning,
+                        )
+                    )
+                    yield sse_step("generate_done", f"Log analysis ready ({llm_resp.mode})")
+
+                    from core.retrieval.rag import _build_sources, RAGResponse
+                    result = RAGResponse(
+                        answer=llm_resp.answer,
+                        confidence=conf_result.confidence_score,
+                        no_data=llm_resp.no_data,
+                        mode=llm_resp.mode,
+                        sources=_build_sources(relevant),
+                    )
+                else:
+                    yield sse_step("generate", f"Generating answer from {len(relevant)} sources...")
+                    svc = get_llm_service()
+                    llm_resp = await loop.run_in_executor(
+                        None, partial(svc.generate_response, relevant, body.question)
+                    )
+                    yield sse_step("generate_done", f"Answer ready ({llm_resp.mode})")
+
+                    from core.retrieval.rag import _build_sources, RAGResponse
+                    result = RAGResponse(
+                        answer=llm_resp.answer,
+                        confidence=relevant[0].confidence,
+                        no_data=llm_resp.no_data,
+                        mode=llm_resp.mode,
+                        sources=_build_sources(relevant),
+                    )
+
+            elif ranked and is_log_q:
+                # ── Low confidence log query: analysis + summarize ────────
+                from core.analysis.trends import analyze_error_trends
+                from core.analysis.clusters import cluster_log_events
+                from core.analysis.confidence import calculate_confidence
+
+                analysis_chunks = ranked[:5]
+
+                yield sse_step("trend_analysis", "Detecting error trends...")
+                trend_report = await loop.run_in_executor(
+                    None, analyze_error_trends, analysis_chunks)
+                yield sse_step("trend_done",
+                    f"{trend_report.hourly_counts.total_errors} errors, "
+                    f"{len(trend_report.spikes)} spikes")
+
+                yield sse_step("cluster_analysis", "Clustering log events...")
+                cluster_report = await loop.run_in_executor(
+                    None, cluster_log_events, analysis_chunks)
+                yield sse_step("cluster_done",
+                    f"Found {cluster_report.cluster_count} cluster(s)")
+
+                yield sse_step("confidence_scoring", "Computing multi-factor confidence...")
+                conf_result = await loop.run_in_executor(
+                    None, partial(calculate_confidence, analysis_chunks, "auto", body.question))
+                yield sse_step("confidence_done",
+                    f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})")
+
                 yield sse_step("log_summarize", "Summarising log entries for errors...")
                 svc = get_llm_service()
                 llm_resp = await loop.run_in_executor(
-                    None, partial(svc.generate_log_summary, body.question, ranked[:5])
+                    None, partial(
+                        svc.generate_log_summary, body.question, analysis_chunks,
+                        trend_report.summary_text(),
+                        cluster_report.summary_text(),
+                        conf_result.reasoning,
+                    )
                 )
                 yield sse_step("log_summarize_done", "Log summary ready")
 
                 from core.retrieval.rag import _build_sources, RAGResponse
                 result = RAGResponse(
                     answer=llm_resp.answer,
-                    confidence=ranked[0].confidence,
+                    confidence=conf_result.confidence_score,
                     no_data=llm_resp.no_data,
                     mode=llm_resp.mode,
-                    sources=_build_sources(ranked[:5]),
+                    sources=_build_sources(analysis_chunks),
                 )
 
             elif ranked:

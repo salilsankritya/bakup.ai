@@ -82,23 +82,48 @@ SYSTEM_CLARIFY = textwrap.dedent("""\
 # ── System prompt — log error summarisation ────────────────────────────────────
 
 SYSTEM_LOG_SUMMARY = textwrap.dedent("""\
-    You are **bakup.ai**, a project-scoped AI assistant.
+    You are **bakup.ai**, a project-scoped AI assistant specialising in
+    log analysis and incident intelligence.
 
     The user is asking about errors, exceptions, or issues in the project's
-    log files. Below are log entries retrieved from the indexed project.
+    log files. Below are log entries retrieved from the indexed project,
+    along with automated analysis results (error trends, incident clusters,
+    and confidence scoring).
 
     ## Your task
-    1. Carefully review ALL the log entries provided.
-    2. Identify any errors, exceptions, warnings, failures, or issues.
-    3. Summarise what errors exist, when they occurred, and in which files.
-    4. If the logs contain stack traces, explain the root cause briefly.
-    5. If NO errors are found in the provided logs, say so clearly.
+    Produce a structured incident report with the following sections:
+
+    ### Summary
+    A 2–3 sentence overview of the overall health picture visible in the logs.
+
+    ### Key Findings
+    A numbered list of each distinct error, failure, or warning found.
+    For each finding include:
+    - **What**: The error type / exception / failure message
+    - **When**: Timestamp(s) or time range
+    - **Where**: Source file and line numbers
+    - **Impact**: Brief assessment (e.g., user-facing, background task, data loss risk)
+
+    ### Example Log Entries
+    Quote 1–3 representative log lines verbatim (use `>` block-quotes).
+
+    ### Observed Patterns
+    - Recurring failures (same error repeating)
+    - Error spikes or clusters (multiple errors in a short window)
+    - Correlations (e.g., deployment followed by errors, cascade failures)
+    - If automated trend/cluster data is provided below, incorporate it.
 
     ## Rules
-    1. Only report what is ACTUALLY in the provided log entries. Never fabricate.
-    2. Cite the source file and line numbers for each finding.
-    3. Be concise and actionable.
-    4. End with: **Confidence: High | Medium | Low**
+    1. Only report what is ACTUALLY in the provided log entries and analysis.
+       Never fabricate file names, line numbers, error messages, or timestamps.
+    2. Cite the source file and line numbers for each finding:
+       (source: <filename>, lines <N>–<M>)
+    3. If the automated analysis section contains trend data or cluster data,
+       reference it in your "Observed Patterns" section.
+    4. If NO errors are found in the provided logs, say so clearly in the
+       Summary section and skip Key Findings.
+    5. Be concise and actionable. Engineers need facts, not prose.
+    6. End with: **Confidence: High | Medium | Low**
 """)
 
 
@@ -168,3 +193,32 @@ def build_context_block(chunks: list, max_chars: int = 800) -> str:
             f"{text}"
         )
     return "\n\n---\n\n".join(parts)
+
+
+def build_log_analysis_context(
+    chunks: list,
+    trend_summary: str = "",
+    cluster_summary: str = "",
+    confidence_summary: str = "",
+    max_chars: int = 800,
+) -> str:
+    """
+    Build an enriched context block for log summarisation.
+
+    Includes the standard chunk context PLUS automated analysis sections
+    (trends, clusters, confidence) when available.
+    """
+    parts = [build_context_block(chunks, max_chars=max_chars)]
+
+    analysis_sections = []
+    if trend_summary:
+        analysis_sections.append(f"## Automated Trend Analysis\n{trend_summary}")
+    if cluster_summary:
+        analysis_sections.append(f"## Automated Cluster Analysis\n{cluster_summary}")
+    if confidence_summary:
+        analysis_sections.append(f"## Confidence Assessment\n{confidence_summary}")
+
+    if analysis_sections:
+        parts.append("\n\n" + "\n\n".join(analysis_sections))
+
+    return "\n\n".join(parts)

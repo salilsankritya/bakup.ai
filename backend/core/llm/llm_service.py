@@ -215,6 +215,9 @@ class LLMService:
         self,
         question: str,
         log_chunks: list,
+        trend_summary: str = "",
+        cluster_summary: str = "",
+        confidence_summary: str = "",
     ) -> LLMResponse:
         """
         Summarise errors/issues found in log chunks.
@@ -224,10 +227,13 @@ class LLMService:
         "No similar incident found", we pass the entries to the LLM and let
         it summarise whether any errors exist.
 
+        When trend/cluster/confidence summaries are provided, they are
+        injected into the context so the LLM can reference them.
+
         Falls back to an extractive display of log entries when the LLM is
         not configured.
         """
-        from core.llm.prompt_templates import SYSTEM_LOG_SUMMARY
+        from core.llm.prompt_templates import SYSTEM_LOG_SUMMARY, build_log_analysis_context
 
         print(f"  [bakup:debug] generate_log_summary called with {len(log_chunks)} chunks")
 
@@ -236,8 +242,14 @@ class LLMService:
             print("  [bakup:debug] LLM not configured — extractive log fallback")
             return self._log_extractive_fallback(log_chunks)
 
-        context = build_context_block(log_chunks[:5], max_chars=_MAX_CHUNK_CHARS)
-        user_msg = f"Context (log entries):\n\n{context}\n\nQuestion: {question}"
+        context = build_log_analysis_context(
+            log_chunks[:5],
+            trend_summary=trend_summary,
+            cluster_summary=cluster_summary,
+            confidence_summary=confidence_summary,
+            max_chars=_MAX_CHUNK_CHARS,
+        )
+        user_msg = f"Context (log entries + analysis):\n\n{context}\n\nQuestion: {question}"
 
         print(f"  [bakup:debug] LLM call: generate_log_summary ({cfg.provider}/{cfg.model})")
         print(f"  [bakup:debug]   context length: {len(context)} chars, {len(log_chunks[:5])} chunks")
