@@ -54,6 +54,11 @@ Comprehensive list of all implemented features in bakup.ai.
 | **Root-cause reasoning mode** | ✅ | Auto-correlates stack traces with code, retrieves deps, asks LLM for root cause |
 | **Session memory** | ✅ | Per-namespace conversation context for follow-up question support |
 | **Follow-up detection** | ✅ | Heuristic detection of follow-up questions using pronouns, short queries, markers |
+| **Error pattern clustering** | ✅ | Groups similar errors by exception type, message similarity, stack trace, file+line |
+| **Time-based trend detection** | ✅ | Per-cluster 1h/24h window analysis with spike, regression, and new error detection |
+| **Causal confidence scoring** | ✅ | 5-factor weighted score (0–100): frequency, stack trace, code match, deps, trend |
+| **Evidence ranking** | ✅ | Ranks clusters by severity × count × trend × reference clarity before LLM |
+| **Structured reasoning input** | ✅ | Injects dominant cluster, frequency stats, time trends, confidence into LLM prompt |
 
 ---
 
@@ -112,6 +117,10 @@ Comprehensive list of all implemented features in bakup.ai.
 | **Session diagnostics** | ✅ | `GET /debug/session/{ns}` — shows session memory state and turns |
 | **Session clear** | ✅ | `POST /debug/session/{ns}/clear` — clears session memory |
 | **Agent step tracing** | ✅ | Each agent step logged with timing, chunk counts, and evidence state |
+| **Error cluster diagnostics** | ✅ | `POST /debug/clusters` — error pattern clusters with signatures, counts |
+| **Causal confidence diagnostics** | ✅ | `POST /debug/causal-confidence` — full scoring pipeline with factor breakdown |
+| **Trend detection diagnostics** | ✅ | `POST /debug/trends` — per-cluster time trends, spike/regression alerts |
+| **Causal confidence in pipeline trace** | ✅ | Score, dominant error, and trend alerts in debug trace |
 | Console debug logging | ✅ | Detailed per-request logging: classification, retrieval, LLM calls |
 
 ---

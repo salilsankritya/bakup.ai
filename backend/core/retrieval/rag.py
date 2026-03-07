@@ -394,6 +394,27 @@ def answer_question(
           f"cross_analysis={'yes' if evidence.has_cross_analysis else 'no'} "
           f"({evidence.total_ms:.0f}ms)")
 
+    # Log causal confidence if available
+    if evidence.causal_confidence:
+        cc = evidence.causal_confidence
+        _step("causal_confidence",
+              f"Score: {cc.get('score', 0)}/100 ({cc.get('level', 'unknown')})",
+              dominant_error=cc.get("dominant_error", ""),
+              factors=cc.get("factors", {}))
+
+    if evidence.error_cluster_report:
+        ecr = evidence.error_cluster_report
+        _step("error_clusters",
+              f"{ecr.get('cluster_count', 0)} cluster(s) detected, "
+              f"dominant: {ecr.get('dominant_cluster', {}).get('error_signature', 'none') if ecr.get('dominant_cluster') else 'none'}")
+
+    if evidence.trend_detection_report:
+        tdr = evidence.trend_detection_report
+        _step("trend_detection",
+              f"Spikes: {tdr.get('spike_count', 0)}, "
+              f"Regressions: {tdr.get('regression_count', 0)}, "
+              f"New errors: {tdr.get('new_error_count', 0)}")
+
     # ── Step 5: Generate answer from structured evidence ──────────────────────
 
     # Combine all evidence chunks for threshold check

@@ -39,6 +39,14 @@ from core.retrieval.planner import (
 )
 from core.retrieval.ranker import RankedResult, rank_results, has_relevant_results, top_relevant
 
+# Type hint only — actual imports deferred to avoid circular deps
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from core.analysis.error_clustering import ErrorClusterReport
+    from core.analysis.trend_detector import TrendDetectionReport
+    from core.analysis.causal_confidence import CausalConfidenceResult
+    from core.analysis.evidence_ranker import StructuredReasoningInput
+
 logger = logging.getLogger("bakup.agent")
 
 
@@ -74,6 +82,13 @@ class StructuredEvidence:
     cluster_summary: str = ""
     confidence_summary: str = ""
     file_aggregation_summary: str = ""
+
+    # Causal analysis results (v4 — error clustering + trend detection)
+    error_cluster_report: Optional[dict] = None        # ErrorClusterReport.to_dict()
+    trend_detection_report: Optional[dict] = None       # TrendDetectionReport.to_dict()
+    causal_confidence: Optional[dict] = None             # CausalConfidenceResult.to_dict()
+    structured_reasoning: Optional[str] = None           # StructuredReasoningInput.to_prompt_block()
+    structured_reasoning_dict: Optional[dict] = None     # StructuredReasoningInput.to_dict()
 
     # Reasoning trace
     step_results: List[StepResult] = field(default_factory=list)
@@ -209,6 +224,47 @@ def _execute_search_logs(
         except Exception:
             pass
 
+        # ── V4: Error pattern clustering + trend detection + causal confidence ──
+        try:
+            from core.analysis.error_clustering import cluster_error_patterns
+            ecr = cluster_error_patterns(analysis_chunks)
+            evidence.error_cluster_report = ecr.to_dict()
+
+            # Cluster summary for backward compat — prefer the richer report
+            if ecr.clusters:
+                evidence.cluster_summary = ecr.summary_text()
+        except Exception:
+            ecr = None
+
+        try:
+            from core.analysis.trend_detector import detect_trends
+            if ecr and ecr.clusters:
+                tdr = detect_trends(ecr, analysis_chunks)
+                evidence.trend_detection_report = tdr.to_dict()
+                # Enrich trend summary with per-cluster trends
+                if tdr.has_alerts:
+                    evidence.trend_summary = (evidence.trend_summary or "") + "\n\n" + tdr.summary_text()
+            else:
+                tdr = None
+        except Exception:
+            tdr = None
+
+        try:
+            from core.analysis.causal_confidence import compute_causal_confidence
+            if ecr:
+                ccr = compute_causal_confidence(
+                    cluster_report=ecr,
+                    trend_report=tdr,
+                    code_chunk_count=len(evidence.code),
+                    reference_count=len(evidence.references_found),
+                    dependency_count=len(evidence.dependencies),
+                    cross_analysis_available=bool(evidence.cross_analysis_context),
+                )
+                evidence.causal_confidence = ccr.to_dict()
+                evidence.confidence_summary = ccr.explanation
+        except Exception:
+            ccr = None
+
 
 def _execute_search_code(
     question: str,
@@ -336,7 +392,7 @@ def _execute_query_graph(
 
 
 def _execute_cross_analysis(evidence: StructuredEvidence) -> None:
-    """Link log errors to code via the log-code linker."""
+    """Link log errors to code via the log-code linker, then rank evidence."""
     from core.analysis.log_code_linker import link_logs_to_code, build_cross_analysis_context
 
     if not evidence.logs or not evidence.code:
@@ -346,6 +402,97 @@ def _execute_cross_analysis(evidence: StructuredEvidence) -> None:
     linked_count = sum(1 for l in links if l.code_chunks)
     if links and linked_count > 0:
         evidence.cross_analysis_context = build_cross_analysis_context(links)
+
+    # ── V4: Build structured reasoning input after cross-analysis ────────────
+    # This requires that error_cluster_report and causal_confidence were set
+    # during search_logs. If not, re-run them now with updated evidence.
+    try:
+        from core.analysis.error_clustering import cluster_error_patterns
+        from core.analysis.trend_detector import detect_trends
+        from core.analysis.causal_confidence import compute_causal_confidence
+        from core.analysis.evidence_ranker import rank_evidence
+
+        # If clustering wasn't done yet (e.g., non-log entry path), do it now
+        if evidence.error_cluster_report is None and evidence.logs:
+            ecr = cluster_error_patterns(evidence.logs)
+            evidence.error_cluster_report = ecr.to_dict()
+        else:
+            ecr = None
+            if evidence.error_cluster_report:
+                # Reconstruct from dict for the ranker
+                from core.analysis.error_clustering import ErrorClusterReport as ECR, ErrorCluster as EC
+                ecr = ECR(
+                    total_entries=evidence.error_cluster_report.get("total_entries", 0),
+                    unclustered_count=evidence.error_cluster_report.get("unclustered_count", 0),
+                )
+                for cd in evidence.error_cluster_report.get("clusters", []):
+                    ecr.clusters.append(EC(
+                        cluster_id=cd.get("cluster_id", 0),
+                        error_signature=cd.get("error_signature", ""),
+                        exception_type=cd.get("exception_type", ""),
+                        count=cd.get("count", 0),
+                        first_seen=cd.get("first_seen"),
+                        last_seen=cd.get("last_seen"),
+                        related_files=cd.get("related_files", []),
+                        related_functions=cd.get("related_functions", []),
+                        severity=cd.get("severity", "unknown"),
+                        sample_messages=cd.get("sample_messages", []),
+                        stack_frames=cd.get("stack_frames", []),
+                        occurrences_1h=cd.get("occurrences_1h", 0),
+                        occurrences_24h=cd.get("occurrences_24h", 0),
+                        trend_pct_change=cd.get("trend_pct_change", 0),
+                        trend_label=cd.get("trend_label", ""),
+                    ))
+
+        if ecr and ecr.clusters:
+            # Trend detection (may already exist)
+            tdr = None
+            if evidence.trend_detection_report:
+                from core.analysis.trend_detector import TrendDetectionReport as TDR, ClusterTrend
+                tdr = TDR(
+                    spike_count=evidence.trend_detection_report.get("spike_count", 0),
+                    regression_count=evidence.trend_detection_report.get("regression_count", 0),
+                    new_error_count=evidence.trend_detection_report.get("new_error_count", 0),
+                    analysis_time_utc=evidence.trend_detection_report.get("analysis_time_utc", ""),
+                )
+                for td in evidence.trend_detection_report.get("cluster_trends", []):
+                    tdr.cluster_trends.append(ClusterTrend(
+                        cluster_id=td.get("cluster_id", 0),
+                        total=td.get("total", 0),
+                        last_1h=td.get("last_1h", 0),
+                        last_24h=td.get("last_24h", 0),
+                        pct_change=td.get("pct_change", 0),
+                        trend_label=td.get("trend_label", "stable"),
+                        spike_detected=td.get("spike_detected", False),
+                        is_new=td.get("is_new", False),
+                        is_regression=td.get("is_regression", False),
+                    ))
+
+            # Recompute causal confidence with updated cross-analysis status
+            ccr = compute_causal_confidence(
+                cluster_report=ecr,
+                trend_report=tdr,
+                code_chunk_count=len(evidence.code),
+                reference_count=len(evidence.references_found),
+                dependency_count=len(evidence.dependencies),
+                cross_analysis_available=bool(evidence.cross_analysis_context),
+            )
+            evidence.causal_confidence = ccr.to_dict()
+            evidence.confidence_summary = ccr.explanation
+
+            # Rank evidence
+            sri = rank_evidence(
+                cluster_report=ecr,
+                trend_report=tdr,
+                confidence_result=ccr,
+                code_chunks=evidence.code,
+                dependencies=evidence.dependencies,
+            )
+            evidence.structured_reasoning = sri.to_prompt_block()
+            evidence.structured_reasoning_dict = sri.to_dict()
+
+    except Exception as exc:
+        logger.warning("V4 evidence ranking failed: %s", exc)
 
 
 def _execute_bundle_context(evidence: StructuredEvidence) -> None:
@@ -548,5 +695,9 @@ def build_evidence_context(
                 parts.append(f"line: {ref['line_number']}")
             ref_lines.append("- " + ", ".join(parts))
         sections.append("## Extracted Code References\n\n" + "\n".join(ref_lines))
+
+    # Structured reasoning input (v4 — causal confidence + cluster ranking)
+    if evidence.structured_reasoning:
+        sections.append("## Structured Root-Cause Analysis\n\n" + evidence.structured_reasoning)
 
     return "\n\n" + "═" * 60 + "\n\n".join(sections)

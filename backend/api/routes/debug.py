@@ -11,6 +11,8 @@ These endpoints help identify:
   - Full retrieval diagnostics for a query
   - Agentic retrieval plan and reasoning trace
   - Session memory state
+  - Error pattern clusters and causal confidence scoring
+  - Time-based trend detection and spike alerts
 
 Endpoints:
   GET  /debug/index/{namespace}        — index diagnostics
@@ -20,6 +22,9 @@ Endpoints:
   POST /debug/plan                     — agentic retrieval plan for a query
   GET  /debug/session/{namespace}      — session memory state
   POST /debug/session/{namespace}/clear — clear session memory
+  POST /debug/clusters                 — error pattern clusters for a query
+  POST /debug/causal-confidence        — full causal confidence analysis
+  POST /debug/trends                   — time-based trend detection
 """
 from __future__ import annotations
 
@@ -382,4 +387,235 @@ async def debug_clear_session(namespace: str) -> dict:
         "namespace": namespace,
         "status": "cleared",
         "message": f"Session memory for '{namespace}' has been cleared.",
+    }
+
+
+# ── Error pattern cluster diagnostics ─────────────────────────────────────────
+
+@router.post("/clusters")
+async def debug_clusters(body: dict) -> dict:
+    """
+    Run error pattern clustering on retrieved log chunks for a query.
+
+    Shows:
+      - Detected error clusters with signatures, counts, severity
+      - Related files and functions per cluster
+      - Sample messages and common stack frames
+      - Dominant cluster identification
+    """
+    question = body.get("question", "")
+    namespace = body.get("namespace", "")
+    top_k = body.get("top_k", 15)
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question required")
+    if not namespace.strip():
+        raise HTTPException(status_code=400, detail="Namespace required")
+
+    from core.embeddings.embedder import embed_query
+    from core.retrieval.vector_store import query_chunks, keyword_search, severity_search
+    from core.retrieval.ranker import rank_results
+    from core.retrieval.rag import _extract_search_keywords
+    from core.analysis.error_clustering import cluster_error_patterns
+
+    t0 = time.perf_counter()
+
+    # Retrieve log chunks
+    query_vec = embed_query(question)
+    raw = query_chunks(query_vec, namespace=namespace, top_k=top_k)
+
+    # Keyword search
+    kws = _extract_search_keywords(question)
+    kw_chunks = keyword_search(namespace, kws, top_k=top_k) if kws else []
+
+    # Severity search
+    sev_chunks = severity_search(namespace, severity="error", top_k=top_k)
+
+    # Merge & rank
+    all_chunks = raw + kw_chunks + sev_chunks
+    seen = set()
+    deduped = []
+    for c in all_chunks:
+        key = (c.source_file, c.line_start, c.line_end)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(c)
+    ranked = rank_results(deduped)
+
+    # Cluster
+    report = cluster_error_patterns(ranked)
+    pipeline_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    return {
+        "question": question,
+        "namespace": namespace,
+        "pipeline_ms": pipeline_ms,
+        "total_chunks_retrieved": len(ranked),
+        **report.to_dict(),
+        "summary": report.summary_text(),
+    }
+
+
+# ── Causal confidence scoring diagnostics ─────────────────────────────────────
+
+@router.post("/causal-confidence")
+async def debug_causal_confidence(body: dict) -> dict:
+    """
+    Run the full causal confidence scoring pipeline for a query.
+
+    Shows:
+      - Error clusters detected
+      - Per-cluster time trends (1h, 24h, % change)
+      - Causal confidence score (0–100) with factor breakdown
+      - Structured reasoning input summary
+      - Spike/regression/new error alerts
+    """
+    question = body.get("question", "")
+    namespace = body.get("namespace", "")
+    top_k = body.get("top_k", 15)
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question required")
+    if not namespace.strip():
+        raise HTTPException(status_code=400, detail="Namespace required")
+
+    from core.embeddings.embedder import embed_query
+    from core.retrieval.vector_store import query_chunks, keyword_search, severity_search
+    from core.retrieval.ranker import rank_results
+    from core.retrieval.rag import _extract_search_keywords
+    from core.analysis.error_clustering import cluster_error_patterns
+    from core.analysis.trend_detector import detect_trends
+    from core.analysis.causal_confidence import compute_causal_confidence
+    from core.analysis.evidence_ranker import rank_evidence
+
+    t0 = time.perf_counter()
+
+    # Retrieve log chunks
+    query_vec = embed_query(question)
+    raw = query_chunks(query_vec, namespace=namespace, top_k=top_k)
+    kws = _extract_search_keywords(question)
+    kw_chunks = keyword_search(namespace, kws, top_k=top_k) if kws else []
+    sev_chunks = severity_search(namespace, severity="error", top_k=top_k)
+
+    all_chunks = raw + kw_chunks + sev_chunks
+    seen = set()
+    deduped = []
+    for c in all_chunks:
+        key = (c.source_file, c.line_start, c.line_end)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(c)
+    ranked = rank_results(deduped)
+
+    # Error clustering
+    ecr = cluster_error_patterns(ranked)
+
+    # Trend detection
+    tdr = detect_trends(ecr, ranked)
+
+    # Causal confidence
+    code_chunks = [r for r in ranked if r.source_type == "code"]
+    ccr = compute_causal_confidence(
+        cluster_report=ecr,
+        trend_report=tdr,
+        code_chunk_count=len(code_chunks),
+        reference_count=0,
+        dependency_count=0,
+        cross_analysis_available=False,
+    )
+
+    # Evidence ranking
+    sri = rank_evidence(
+        cluster_report=ecr,
+        trend_report=tdr,
+        confidence_result=ccr,
+        code_chunks=code_chunks,
+    )
+
+    pipeline_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    return {
+        "question": question,
+        "namespace": namespace,
+        "pipeline_ms": pipeline_ms,
+        "total_chunks_retrieved": len(ranked),
+        "error_clusters": ecr.to_dict(),
+        "trend_detection": tdr.to_dict(),
+        "causal_confidence": ccr.to_dict(),
+        "structured_reasoning": sri.to_dict(),
+        "structured_reasoning_prompt": sri.to_prompt_block(),
+    }
+
+
+# ── Time-based trend detection diagnostics ────────────────────────────────────
+
+@router.post("/trends")
+async def debug_trends(body: dict) -> dict:
+    """
+    Run time-based trend detection on retrieved log chunks.
+
+    Shows:
+      - Per-cluster occurrence counts (1h, 24h windows)
+      - Percentage change vs previous window
+      - Spike, regression, and new error detection
+      - Existing trend analysis from the trends module
+    """
+    question = body.get("question", "")
+    namespace = body.get("namespace", "")
+    top_k = body.get("top_k", 15)
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question required")
+    if not namespace.strip():
+        raise HTTPException(status_code=400, detail="Namespace required")
+
+    from core.embeddings.embedder import embed_query
+    from core.retrieval.vector_store import query_chunks, keyword_search, severity_search
+    from core.retrieval.ranker import rank_results
+    from core.retrieval.rag import _extract_search_keywords
+    from core.analysis.error_clustering import cluster_error_patterns
+    from core.analysis.trend_detector import detect_trends
+    from core.analysis.trends import analyze_error_trends
+
+    t0 = time.perf_counter()
+
+    query_vec = embed_query(question)
+    raw = query_chunks(query_vec, namespace=namespace, top_k=top_k)
+    kws = _extract_search_keywords(question)
+    kw_chunks = keyword_search(namespace, kws, top_k=top_k) if kws else []
+    sev_chunks = severity_search(namespace, severity="error", top_k=top_k)
+
+    all_chunks = raw + kw_chunks + sev_chunks
+    seen = set()
+    deduped = []
+    for c in all_chunks:
+        key = (c.source_file, c.line_start, c.line_end)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(c)
+    ranked = rank_results(deduped)
+
+    # Existing trend analysis
+    legacy_trends = analyze_error_trends(ranked)
+
+    # Error clustering + new trend detection
+    ecr = cluster_error_patterns(ranked)
+    tdr = detect_trends(ecr, ranked)
+
+    pipeline_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    return {
+        "question": question,
+        "namespace": namespace,
+        "pipeline_ms": pipeline_ms,
+        "total_chunks_retrieved": len(ranked),
+        "legacy_trends": legacy_trends.to_dict(),
+        "error_clusters": ecr.to_dict(),
+        "cluster_trends": tdr.to_dict(),
+        "summary": tdr.summary_text(),
+        "alerts": {
+            "spikes": tdr.spike_count,
+            "regressions": tdr.regression_count,
+            "new_errors": tdr.new_error_count,
+        },
     }
