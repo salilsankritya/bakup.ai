@@ -94,6 +94,7 @@ hidden_imports = [
     "core.retrieval.rag",
     "core.retrieval.ranker",
     "core.retrieval.vector_store",
+    "core.net",
     "config",
 
     # sentence-transformers

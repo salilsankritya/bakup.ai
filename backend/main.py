@@ -23,6 +23,17 @@ check_access_key()
 import config as _config
 _config.settings = _config.load_settings()
 
+# ── Step 2a: Port auto-detection ─────────────────────────────────────────────
+# Must happen before FastAPI app construction so the CORS origin list and
+# uvicorn bind use the same (possibly adjusted) port.
+from core.net import resolve_port
+_resolved_port = resolve_port(_config.settings.host, _config.settings.port)
+if _resolved_port != _config.settings.port:
+    # Rebuild settings with the new port so everything downstream sees it
+    import os as _os
+    _os.environ["BAKUP_PORT"] = str(_resolved_port)
+    _config.settings = _config.load_settings()
+
 # ── Step 3: Build the FastAPI application ─────────────────────────────────────
 from contextlib import asynccontextmanager
 

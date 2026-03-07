@@ -58,6 +58,15 @@ check_access_key()
 import config as _config
 _config.settings = _config.load_settings()
 
+# ── Port auto-detection ───────────────────────────────────────────────────────
+# Must happen before FastAPI app construction so the CORS origin list
+# and uvicorn bind use the same (possibly adjusted) port.
+from core.net import resolve_port
+_actual_port = resolve_port(_config.settings.host, _config.settings.port)
+if _actual_port != _config.settings.port:
+    os.environ["BAKUP_PORT"] = str(_actual_port)
+    _config.settings = _config.load_settings()
+
 # Import after config is loaded
 from contextlib import asynccontextmanager
 import uvicorn
@@ -135,13 +144,13 @@ if os.path.isdir(_ui_dir):
 
 
 # ── Auto-open browser ────────────────────────────────────────────────────────
-def _open_browser():
+def _open_browser(port: int):
     """Poll the health endpoint until the server is ready, then open the browser."""
     import time
     import urllib.request
     import urllib.error
 
-    url = f"http://127.0.0.1:{settings.port}"
+    url = f"http://127.0.0.1:{port}"
     health_url = f"{url}/health"
     max_wait = 120          # seconds — first run downloads ~90 MB model
     poll_interval = 1       # seconds between health checks
@@ -169,7 +178,7 @@ def _open_browser():
 
 if __name__ == "__main__":
     # Launch browser in background thread
-    browser_thread = threading.Thread(target=_open_browser, daemon=True)
+    browser_thread = threading.Thread(target=_open_browser, args=(settings.port,), daemon=True)
     browser_thread.start()
 
     # Run server directly (not via string import)
