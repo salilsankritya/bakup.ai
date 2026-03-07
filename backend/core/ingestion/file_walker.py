@@ -74,13 +74,15 @@ def _is_safe_path(path: Path, root: Path) -> bool:
         return False
 
 
-def walk_project(project_root: Path) -> Iterator[Chunk]:
+def walk_project(project_root: Path, namespace: str = "") -> Iterator[Chunk]:
     """
     Yield Chunk objects for every readable text file under project_root.
     Read-only: only Path.read_text() is ever called.
 
     Code files are routed through the language-aware code chunker.
     Log files are routed through the log parser.
+
+    When namespace is provided, updates the symbol graph during ingestion.
     """
     root = project_root.resolve()
 
@@ -130,7 +132,7 @@ def walk_project(project_root: Path) -> Iterator[Chunk]:
                     yield chunk
             else:
                 # Use code-aware chunker for all code files
-                for chunk in chunk_file_code_aware(filepath, root):
+                for chunk in chunk_file_code_aware(filepath, root, namespace=namespace):
                     file_chunk_count += 1
                     # Count code structures
                     kind = getattr(chunk, 'chunk_kind', '')

@@ -46,14 +46,15 @@ def _sanitize_url_for_log(url: str) -> str:
         return "<redacted>"
 
 
-def ingest_github_repo(repo_url: str, branch: str = "HEAD") -> List[Chunk]:
+def ingest_github_repo(repo_url: str, branch: str = "HEAD", namespace: str = "") -> List[Chunk]:
     """
     Clone a GitHub repository to a temporary directory, walk it, and return
     all chunks. The temp directory is deleted on completion or error.
 
     Args:
-        repo_url: HTTPS clone URL. Credentials may be embedded for private repos.
-        branch:   Branch or ref to clone. Defaults to the repo's default branch.
+        repo_url:  HTTPS clone URL. Credentials may be embedded for private repos.
+        branch:    Branch or ref to clone. Defaults to the repo's default branch.
+        namespace: Project namespace for symbol graph / architecture indexing.
 
     Returns:
         List of Chunk objects. Empty if the clone fails.
@@ -85,15 +86,23 @@ def ingest_github_repo(repo_url: str, branch: str = "HEAD") -> List[Chunk]:
         if branch and branch != "HEAD":
             clone_kwargs["branch"] = branch
 
-        git.Repo.clone_from(
+        repo = git.Repo.clone_from(
             repo_url,
             tmp_dir,
             multi_options=["--filter=blob:none"],   # partial clone — skip large blobs
             **clone_kwargs,
         )
 
-        print(f"bakup: clone complete, walking {tmp_dir}")
-        chunks = list(walk_project(Path(tmp_dir)))
+        # Extract repo metadata for enriched chunks
+        repo_meta = _extract_repo_metadata(repo, repo_url, branch)
+        print(f"bakup: clone complete ({repo_meta.get('repo_name', '?')}@{repo_meta.get('branch', '?')}), walking {tmp_dir}")
+
+        chunks = list(walk_project(Path(tmp_dir), namespace=namespace))
+
+        # Enrich chunks with repo metadata
+        for chunk in chunks:
+            chunk.metadata = {**(chunk.metadata or {}), **repo_meta}
+
         print(f"bakup: {len(chunks)} chunks from {safe_url}")
         return chunks
 
@@ -106,6 +115,36 @@ def ingest_github_repo(repo_url: str, branch: str = "HEAD") -> List[Chunk]:
         return []
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _extract_repo_metadata(repo, repo_url: str, branch: str) -> dict:
+    """Extract repository metadata from the cloned repo object."""
+    meta: dict = {}
+    try:
+        parsed = urlparse(repo_url)
+        path_parts = parsed.path.strip("/").rstrip(".git").split("/")
+        if len(path_parts) >= 2:
+            meta["repo_owner"] = path_parts[-2]
+            meta["repo_name"] = path_parts[-1]
+        elif path_parts:
+            meta["repo_name"] = path_parts[-1]
+    except Exception:
+        pass
+
+    try:
+        meta["branch"] = str(repo.active_branch)
+    except Exception:
+        meta["branch"] = branch if branch != "HEAD" else "default"
+
+    try:
+        commit = repo.head.commit
+        meta["commit_hash"] = commit.hexsha[:12]
+        meta["commit_message"] = commit.message.strip()[:200]
+        meta["commit_author"] = str(commit.author)
+    except Exception:
+        pass
+
+    return meta
 
 
 def validate_github_url(url: str) -> bool:

@@ -159,10 +159,13 @@ def code_units_to_chunks(
 def chunk_file_code_aware(
     filepath: Path,
     project_root: Path,
+    namespace: str = "",
 ) -> List[Chunk]:
     """
     Read a source file, detect its language, parse structures, and return
     code-aware Chunks with metadata.
+
+    When namespace is provided, also updates the symbol graph.
 
     Falls back to the original line-window chunker for:
       - Files that cannot be decoded
@@ -190,6 +193,14 @@ def chunk_file_code_aware(
     if units:
         chunks = code_units_to_chunks(units, relative)
         if chunks:
+            # Build symbol graph if namespace is provided
+            if namespace:
+                try:
+                    from core.ingestion.symbol_graph import build_graph_from_units
+                    build_graph_from_units(units, relative, namespace)
+                except Exception as exc:
+                    logger.debug("Symbol graph build failed for %s: %s", relative, exc)
+
             # Log parsing stats
             func_count = sum(1 for u in units if u.kind == "function")
             class_count = sum(1 for u in units if u.kind == "class")

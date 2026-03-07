@@ -209,3 +209,101 @@ async def debug_retrieval(body: dict) -> RetrievalDiagnostics:
         llm_would_be_called=has_rel and cfg.configured,
         pipeline_ms=round(pipeline_ms, 1),
     )
+
+
+# ── Symbol graph diagnostics ──────────────────────────────────────────────────
+
+@router.get("/symbols/{namespace}")
+async def debug_symbols(namespace: str) -> dict:
+    """
+    Return symbol graph summary for a namespace.
+
+    Shows:
+      - Node count and edge count
+      - Files indexed with defined symbols
+      - Import relationships
+    """
+    from core.ingestion.symbol_graph import get_graph
+
+    graph = get_graph(namespace)
+    if graph.node_count == 0:
+        return {
+            "namespace": namespace,
+            "status": "empty",
+            "message": "No symbol graph built. Index a project first.",
+        }
+
+    # Summarise top files by symbol count
+    files_summary = {}
+    for file_path, symbol_names in sorted(
+        graph._file_defines.items(),
+        key=lambda kv: len(kv[1]),
+        reverse=True,
+    )[:20]:
+        files_summary[file_path] = {
+            "symbols": len(symbol_names),
+            "names": sorted(list(symbol_names))[:10],
+        }
+
+    # Top imported modules
+    import_counts = {}
+    for mod, importers in graph._file_imports.items():
+        import_counts[mod] = len(importers)
+    top_imports = dict(sorted(import_counts.items(), key=lambda kv: kv[1], reverse=True)[:15])
+
+    return {
+        "namespace": namespace,
+        "node_count": graph.node_count,
+        "edge_count": graph.edge_count,
+        "files_indexed": len(graph._file_defines),
+        "top_files": files_summary,
+        "top_imports": top_imports,
+    }
+
+
+# ── Architecture summary diagnostics ──────────────────────────────────────────
+
+@router.get("/architecture/{namespace}")
+async def debug_architecture(namespace: str) -> dict:
+    """
+    Return cached architecture summary for a namespace.
+
+    Shows:
+      - Languages, entry points, modules
+      - Core dependencies, config files
+      - Rendered summary text
+    """
+    from core.analysis.architecture import get_architecture
+
+    arch = get_architecture(namespace)
+    if arch is None:
+        return {
+            "namespace": namespace,
+            "status": "empty",
+            "message": "No architecture summary. Index a project first.",
+        }
+
+    return {
+        "namespace": namespace,
+        "project_name": arch.project_name,
+        "languages": dict(arch.languages),
+        "total_files": arch.total_files,
+        "total_functions": arch.total_functions,
+        "total_classes": arch.total_classes,
+        "entry_points": arch.entry_points,
+        "modules": [
+            {
+                "name": m.name,
+                "path": m.path,
+                "file_count": m.file_count,
+                "languages": list(m.languages),
+                "functions": m.functions,
+                "classes": m.classes,
+                "description": m.description,
+            }
+            for m in arch.modules
+        ],
+        "config_files": arch.config_files,
+        "core_dependencies": arch.core_dependencies,
+        "summary_text": arch.summary_text(),
+    }

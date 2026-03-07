@@ -219,6 +219,7 @@ class LLMService:
         cluster_summary: str = "",
         confidence_summary: str = "",
         file_aggregation_summary: str = "",
+        cross_analysis_context: str = "",
     ) -> LLMResponse:
         """
         Summarise errors/issues found in log chunks.
@@ -231,10 +232,17 @@ class LLMService:
         When trend/cluster/confidence/file-aggregation summaries are provided,
         they are injected into the context so the LLM can reference them.
 
+        When cross_analysis_context is provided (log-to-code links), it is
+        appended after the standard context so the LLM can correlate errors
+        with source code for root-cause analysis.
+
         Falls back to an extractive display of log entries when the LLM is
         not configured.
         """
-        from core.llm.prompt_templates import SYSTEM_LOG_SUMMARY, build_log_analysis_context
+        from core.llm.prompt_templates import (
+            SYSTEM_LOG_SUMMARY, SYSTEM_CROSS_ANALYSIS,
+            build_log_analysis_context,
+        )
 
         print(f"  [bakup:debug] generate_log_summary called with {len(log_chunks)} chunks")
 
@@ -251,19 +259,26 @@ class LLMService:
             file_aggregation_summary=file_aggregation_summary,
             max_chars=_MAX_CHUNK_CHARS,
         )
+
+        # Append cross-analysis context when log-code links are available
+        if cross_analysis_context:
+            context += "\n\n## Log-to-Code Cross Analysis\n" + cross_analysis_context
+
+        system_prompt = SYSTEM_CROSS_ANALYSIS if cross_analysis_context else SYSTEM_LOG_SUMMARY
         user_msg = f"Context (log entries + analysis):\n\n{context}\n\nQuestion: {question}"
 
-        print(f"  [bakup:debug] LLM call: generate_log_summary ({cfg.provider}/{cfg.model})")
+        mode_label = "cross-analysis" if cross_analysis_context else "log-summary"
+        print(f"  [bakup:debug] LLM call: {mode_label} ({cfg.provider}/{cfg.model})")
         print(f"  [bakup:debug]   context length: {len(context)} chars, {len(log_chunks[:5])} chunks")
 
         try:
-            raw = self._call_provider(cfg, user_msg, system_prompt=SYSTEM_LOG_SUMMARY)
+            raw = self._call_provider(cfg, user_msg, system_prompt=system_prompt)
         except Exception as exc:
             safe_msg = _redact_key(str(exc), cfg.api_key)
             print(f"  [bakup:debug] LLM error in log summary: {safe_msg}")
             return self._log_extractive_fallback(log_chunks)
 
-        print(f"  [bakup:debug] LLM log-summary response received ({len(raw)} chars)")
+        print(f"  [bakup:debug] LLM {mode_label} response received ({len(raw)} chars)")
 
         if raw.strip().startswith(NO_ANSWER_TOKEN):
             return LLMResponse(

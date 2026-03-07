@@ -44,6 +44,7 @@ class Chunk:
     chunk_kind: str = ""              # "function" | "class" | "method" | "module" | "config_block"
     docstring: str = ""               # extracted docstring or JSDoc
     imports: str = ""                 # newline-separated import lines
+    metadata: Optional[dict] = None   # extra metadata (repo info, etc.)
 
 
 def chunk_text(

@@ -69,6 +69,12 @@ from core.analysis.trends import analyze_error_trends
 from core.analysis.clusters import cluster_log_events
 from core.analysis.file_aggregation import aggregate_by_file
 
+# New intelligence modules
+from core.retrieval.context_bundler import bundle_context, bundles_to_ranked_list, build_bundled_context_block
+from core.ingestion.symbol_graph import query_symbol_graph
+from core.analysis.architecture import get_architecture
+from core.analysis.log_code_linker import link_logs_to_code, build_cross_analysis_context
+
 # Signal the LLM must produce when it cannot answer from context
 _NO_ANSWER_SIGNAL = "NO_ANSWER"
 
@@ -118,6 +124,32 @@ def _is_log_query(question: str) -> bool:
     if re.search(r"\blog(s|file)?\b", q_lower):
         return True
     return False
+
+
+def _is_architecture_query(question: str) -> bool:
+    """Check if the question asks about project architecture or structure."""
+    q_lower = question.lower()
+    _arch_patterns = [
+        r"\barchitecture\b", r"\bproject\s+structure\b", r"\boverview\b",
+        r"\bhow\s+is.*\borganized\b", r"\bexplain\s+the\s+project\b",
+        r"\bdirectory\s+structure\b", r"\bmodules?\b.*\bproject\b",
+        r"\bproject\s+layout\b", r"\bentry\s+points?\b",
+        r"\btell\s+me\s+about\s+(?:the\s+)?(?:project|codebase)\b",
+        r"\bwhat\s+does\s+(?:the\s+)?(?:project|codebase)\s+do\b",
+    ]
+    return any(re.search(p, q_lower) for p in _arch_patterns)
+
+
+def _is_structural_query(question: str) -> bool:
+    """Check if the question can be answered from the symbol graph."""
+    q_lower = question.lower()
+    _struct_patterns = [
+        r"which\s+files?\s+(?:use|import|depend on|reference)",
+        r"what\s+depends?\s+on",
+        r"(?:what|which)\s+methods?\s+(?:does|has)",
+        r"(?:what|which)\s+(?:functions?|classes?|symbols?)\s+(?:are\s+)?in",
+    ]
+    return any(re.search(p, q_lower) for p in _struct_patterns)
 
 
 def _extract_search_keywords(question: str) -> List[str]:
@@ -260,6 +292,38 @@ def answer_question(
             mode="off_topic",
             sources=[],
         ))
+
+    # ── Step 1b: Architecture query (answer from cached summary) ──────────────
+    if _is_architecture_query(question):
+        _step("architecture", "Architecture query detected — checking cached summary")
+        arch = get_architecture(namespace)
+        if arch:
+            _step("architecture_hit", f"Serving cached architecture ({arch.total_files} files, {len(arch.modules)} modules)")
+            print(f"  [bakup:debug] classification=architecture | docs_retrieved=0 | llm_called=no")
+            return _result(RAGResponse(
+                answer=arch.summary_text(),
+                confidence=1.0,
+                no_data=False,
+                mode="architecture",
+                sources=[],
+            ))
+        _step("architecture_miss", "No cached architecture — falling through to RAG")
+
+    # ── Step 1c: Structural query (answer from symbol graph) ──────────────────
+    if _is_structural_query(question):
+        _step("symbol_graph", "Structural query detected — querying symbol graph")
+        graph_answer = query_symbol_graph(namespace, question)
+        if graph_answer:
+            _step("symbol_graph_hit", f"Symbol graph answered ({len(graph_answer)} chars)")
+            print(f"  [bakup:debug] classification=structural | docs_retrieved=0 | llm_called=no")
+            return _result(RAGResponse(
+                answer=graph_answer,
+                confidence=1.0,
+                no_data=False,
+                mode="symbol_graph",
+                sources=[],
+            ))
+        _step("symbol_graph_miss", "Symbol graph cannot answer — falling through to RAG")
 
     # ── Step 2: Embed & retrieve ──────────────────────────────────────────────
     _step("embed", "Embedding query for semantic search...")
@@ -428,17 +492,44 @@ def answer_question(
         _step("file_aggregation_done",
               f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s), dominant: {agg_report.dominant_file or 'N/A'}")
 
+        # ── Log-to-code cross analysis ────────────────────────────────────────
+        cross_context = ""
+        log_chunks = [r for r in relevant if r.source_type == "log"]
+        code_chunks = [r for r in ranked if r.source_type == "code"]
+        if log_chunks and code_chunks:
+            _step("cross_analysis", f"Linking {len(log_chunks)} log chunks to {len(code_chunks)} code chunks...")
+            links = link_logs_to_code(log_chunks, code_chunks)
+            linked_count = sum(1 for l in links if l.code_chunks)
+            if links and linked_count > 0:
+                cross_context = build_cross_analysis_context(links)
+                _step("cross_analysis_done", f"{linked_count}/{len(links)} log entries linked to code")
+            else:
+                _step("cross_analysis_done", "No code references found in log entries")
+
         _step("generate", f"Generating structured log analysis from {len(relevant)} chunks...")
         from core.llm.llm_service import get_llm_service
         svc = get_llm_service()
-        llm_resp = svc.generate_log_summary(
-            question,
-            relevant,
-            trend_summary=trend_report.summary_text(),
-            cluster_summary=cluster_report.summary_text(),
-            confidence_summary=conf_result.reasoning,
-            file_aggregation_summary=agg_report.summary_text,
-        )
+
+        if cross_context:
+            # Use cross-analysis mode when we have log-code links
+            llm_resp = svc.generate_log_summary(
+                question,
+                relevant,
+                trend_summary=trend_report.summary_text(),
+                cluster_summary=cluster_report.summary_text(),
+                confidence_summary=conf_result.reasoning,
+                file_aggregation_summary=agg_report.summary_text,
+                cross_analysis_context=cross_context,
+            )
+        else:
+            llm_resp = svc.generate_log_summary(
+                question,
+                relevant,
+                trend_summary=trend_report.summary_text(),
+                cluster_summary=cluster_report.summary_text(),
+                confidence_summary=conf_result.reasoning,
+                file_aggregation_summary=agg_report.summary_text,
+            )
         _step("generate_done", f"Log analysis generated (mode={llm_resp.mode})")
 
         # Debug: file-level and severity breakdown
@@ -462,11 +553,25 @@ def answer_question(
 
     _step("generate", f"Generating answer from {len(relevant)} relevant chunks...")
 
+    # ── Context bundling for code queries ─────────────────────────────────────
+    code_results = [r for r in relevant if r.source_type == "code"]
+    if code_results:
+        _step("bundle", f"Bundling context for {len(code_results)} code chunk(s)...")
+        bundles = bundle_context(ranked, top_n=_LLM_CONTEXT_RESULTS)
+        if bundles:
+            bundled = bundles_to_ranked_list(bundles)
+            sibling_count = sum(len(b.siblings) for b in bundles)
+            import_count = sum(len(b.import_chunks) for b in bundles)
+            _step("bundle_done",
+                  f"{len(bundles)} bundle(s), {sibling_count} sibling(s), {import_count} import ref(s)")
+            relevant = bundled  # Replace with richer context
+
     from core.llm.llm_service import get_llm_service
     svc      = get_llm_service()
     llm_resp = svc.generate_response(relevant, question)
     _step("generate_done", f"Answer generated (mode={llm_resp.mode})")
-    print(f"  [bakup:debug] classification=project | docs_retrieved={len(ranked)} | llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
+    print(f"  [bakup:debug] classification=project | docs_retrieved={len(ranked)} | "
+          f"bundled={len(relevant)} | llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
 
     return _result(RAGResponse(
         answer     = llm_resp.answer,

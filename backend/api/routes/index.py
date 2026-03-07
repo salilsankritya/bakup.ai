@@ -153,6 +153,8 @@ def _run_local_ingestion(path: str, log_path: Optional[str], namespace: str) -> 
     Enriched with:
       - Severity distribution debug logging
       - Per-file chunk counts
+      - Symbol graph building
+      - Architecture summary generation
     """
     from core.ingestion.file_walker import walk_project
     from core.ingestion.log_parser import parse_log_file
@@ -163,7 +165,7 @@ def _run_local_ingestion(path: str, log_path: Optional[str], namespace: str) -> 
 
     project_root = Path(path).resolve()
     logger.info("Ingesting project root: %s", project_root)
-    chunks: list[Chunk] = list(walk_project(project_root))
+    chunks: list[Chunk] = list(walk_project(project_root, namespace=namespace))
     logger.info("Walk complete: %d chunk(s) from source files", len(chunks))
 
     if log_path:
@@ -194,6 +196,57 @@ def _run_local_ingestion(path: str, log_path: Optional[str], namespace: str) -> 
     embeddings = embed_texts(texts)
     stored = add_chunks(chunks, embeddings, namespace=namespace)
     logger.info("Stored %d chunks in namespace %s", stored, namespace)
+
+    # ── Build architecture summary ────────────────────────────────────────
+    try:
+        from core.ingestion.symbol_graph import get_graph
+        from core.analysis.architecture import build_architecture_summary
+        from core.ingestion.code_parser import parse_file, detect_language
+        from collections import Counter as ImportCounter
+
+        graph = get_graph(namespace)
+        file_paths = list(set(c.source_file for c in chunks if c.source_type == "code"))
+
+        # Collect import counts from the symbol graph
+        import_counter = ImportCounter()
+        for file_path, imports in graph._file_imports.items():
+            for imp in imports:
+                import_counter[imp] += 1
+
+        # Collect units by file (from symbol graph nodes)
+        units_by_file = {}
+        for file_path in file_paths:
+            symbols = graph.symbols_in_file(file_path)
+            if symbols:
+                from core.ingestion.code_parser import CodeUnit
+                units_by_file[file_path] = [
+                    CodeUnit(
+                        kind=s.kind, name=s.name, text="",
+                        start_line=s.line_start, end_line=s.line_end,
+                        language=s.language,
+                    )
+                    for s in symbols
+                ]
+
+        arch_summary = build_architecture_summary(
+            file_paths=file_paths,
+            units_by_file=units_by_file,
+            import_counter=import_counter,
+            project_name=Path(path).name,
+            namespace=namespace,
+        )
+        logger.info(
+            "Architecture summary: %d modules, %d entry points, %d deps",
+            len(arch_summary.modules), len(arch_summary.entry_points),
+            len(arch_summary.core_dependencies),
+        )
+        logger.info(
+            "Symbol graph: %d nodes, %d edges",
+            graph.node_count, graph.edge_count,
+        )
+    except Exception as exc:
+        logger.warning("Architecture summary failed: %s", exc)
+
     return stored
 
 
@@ -202,7 +255,7 @@ def _run_github_ingestion(repo_url: str, branch: str, namespace: str) -> int:
     from core.embeddings.embedder import embed_texts
     from core.retrieval.vector_store import add_chunks
 
-    chunks = ingest_github_repo(repo_url, branch=branch)
+    chunks = ingest_github_repo(repo_url, branch=branch, namespace=namespace)
     if not chunks:
         return 0
 
