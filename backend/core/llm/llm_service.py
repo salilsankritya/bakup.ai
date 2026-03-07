@@ -344,6 +344,78 @@ class LLMService:
             model=cfg.model,
         )
 
+    def generate_agentic_answer(
+        self,
+        question: str,
+        context_block: str,
+        mode: str = "root_cause",
+    ) -> LLMResponse:
+        """
+        Generate an agentic reasoning answer from structured evidence.
+
+        Supports:
+          - "root_cause" → uses SYSTEM_AGENTIC_REASONING prompt for
+            multi-step root-cause analysis correlating logs, code, and deps.
+
+        Falls back to extractive display when LLM is not configured.
+        """
+        from core.llm.prompt_templates import SYSTEM_AGENTIC_REASONING
+
+        print(f"  [bakup:debug] generate_agentic_answer: mode={mode}, context_len={len(context_block)}")
+
+        cfg = load_config()
+        if not cfg.configured:
+            print("  [bakup:debug] LLM not configured — returning context as extractive")
+            answer = (
+                "**Agentic Analysis (extractive — configure LLM for full reasoning):**\n\n"
+                + context_block[:3000]
+            )
+            return LLMResponse(
+                answer=answer,
+                mode="extractive",
+                provider="none",
+                model="none",
+            )
+
+        user_msg = f"Context:\n\n{context_block}\n\nQuestion: {question}"
+
+        print(f"  [bakup:debug] LLM call: agentic_{mode} ({cfg.provider}/{cfg.model})")
+
+        try:
+            raw = self._call_provider(cfg, user_msg, system_prompt=SYSTEM_AGENTIC_REASONING)
+        except Exception as exc:
+            safe_msg = _redact_key(str(exc), cfg.api_key)
+            print(f"  [bakup:debug] LLM agentic call failed: {safe_msg}")
+            answer = (
+                "**Agentic Analysis (LLM call failed — showing raw evidence):**\n\n"
+                + context_block[:3000]
+            )
+            return LLMResponse(
+                answer=answer,
+                mode="extractive",
+                provider=cfg.provider,
+                model=cfg.model,
+                error=f"LLM call failed ({safe_msg})",
+            )
+
+        print(f"  [bakup:debug] LLM agentic response received ({len(raw)} chars)")
+
+        if raw.strip().startswith(NO_ANSWER_TOKEN):
+            return LLMResponse(
+                answer="No relevant evidence found for root-cause analysis.",
+                mode="llm",
+                provider=cfg.provider,
+                model=cfg.model,
+                no_data=True,
+            )
+
+        return LLMResponse(
+            answer=raw.strip(),
+            mode="llm",
+            provider=cfg.provider,
+            model=cfg.model,
+        )
+
     def _log_extractive_fallback(self, chunks: list) -> LLMResponse:
         """When LLM is not configured, show log entries directly."""
         if not chunks:

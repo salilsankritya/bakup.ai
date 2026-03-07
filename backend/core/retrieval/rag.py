@@ -1,9 +1,9 @@
 """
 core/retrieval/rag.py
 ─────────────────────────────────────────────────────────────────────────────
-Retrieval-Augmented Generation pipeline.
+Agentic Retrieval-Augmented Generation pipeline.
 
-Query flow (updated):
+Query flow (v3 — agentic multi-step reasoning):
     ┌──────────────┐
     │ User question│
     └──────┬───────┘
@@ -14,35 +14,51 @@ Query flow (updated):
     │              │──► project   → continue ▼
     └──────┬───────┘
            │
-    ┌──────▼───────┐
-    │  Embed query │
-    │  Retrieve    │
-    │  Rank        │
-    └──────┬───────┘
+    ┌──────▼────────────┐
+    │  Session Memory   │──► detect follow-up → inject prior context
+    └──────┬────────────┘
+           │
+    ┌──────▼────────────┐
+    │  Planner          │──► classify question → create retrieval plan
+    │  (question type   │     (steps: search_logs → extract_refs →
+    │   + step plan)    │      retrieve_code → get_deps → cross_analysis)
+    └──────┬────────────┘
+           │
+    ┌──────▼────────────┐
+    │  Agent Executor   │──► run plan steps sequentially
+    │  (multi-step)     │     each step feeds evidence to the next
+    └──────┬────────────┘
+           │
+    ┌──────▼──────────────────────┐
+    │  Structured Evidence        │
+    │  { logs, code, deps,        │
+    │    architecture, cross_ref } │
+    └──────┬──────────────────────┘
            │
     ┌──────▼───────────────────────┐
-    │  Threshold check             │
-    │  ├─ no results at all        │──► "No similar incident found."
-    │  ├─ all below threshold      │──► clarification question (LLM or canned)
-    │  └─ relevant results exist   │──► generate answer (LLM or extractive)
-    └──────────────────────────────┘
+    │  LLM / Extractive answer     │
+    │  (uses evidence bundle as    │
+    │   structured context)        │
+    └──────┬───────────────────────┘
+           │
+    ┌──────▼────────────┐
+    │  Session Store    │──► save turn for follow-up support
+    └───────────────────┘
 
 Operating modes:
   1. Extractive (default, always available):
      Returns the most relevant chunks directly as the answer.
-     No LLM. No hallucination possible. Confidence from embedding similarity.
 
   2. LLM-augmented (opt-in, requires configured LLM provider):
-     Passes retrieved context to the LLM with a strict citation-only system
-     prompt. The model is instructed to respond with NO_ANSWER if the context
-     is insufficient — that signal is checked and honoured.
+     Passes structured evidence to the LLM with role-appropriate prompts.
 
-  3. Clarification (new):
-     When retrieval finds chunks but all are below the confidence threshold,
-     the system asks the user to refine their question instead of guessing.
+  3. Clarification:
+     Asks user to refine when evidence is insufficient.
 
-Neither mode will produce a fabricated answer. If the data is not there,
-we say so. This is an intentional design constraint.
+  4. Agentic root-cause (new):
+     Multi-step reasoning: logs → code refs → dependencies → architecture.
+
+Neither mode will produce a fabricated answer.
 """
 
 from __future__ import annotations
@@ -74,6 +90,17 @@ from core.retrieval.context_bundler import bundle_context, bundles_to_ranked_lis
 from core.ingestion.symbol_graph import query_symbol_graph
 from core.analysis.architecture import get_architecture
 from core.analysis.log_code_linker import link_logs_to_code, build_cross_analysis_context
+
+# Agentic retrieval modules
+from core.retrieval.planner import (
+    QuestionType, RetrievalPlan, create_plan, classify_question as classify_question_type,
+)
+from core.retrieval.agent import (
+    StructuredEvidence, execute_plan, build_evidence_context,
+)
+from core.retrieval.session import (
+    get_session, add_turn, get_session_info,
+)
 
 # Signal the LLM must produce when it cannot answer from context
 _NO_ANSWER_SIGNAL = "NO_ANSWER"
@@ -206,14 +233,14 @@ def answer_question(
     """
     Answer a plain-English question about an indexed project.
 
-    Flow:
+    V3 agentic flow:
         1. Classify the question (project / greeting / off_topic).
         2. For greetings and off-topic → return canned response immediately.
-        3. For project questions → embed, retrieve, rank, answer.
-        4. For log-style queries → enhance retrieval with keyword search.
-        5. If retrieval returns low-confidence results:
-           - Log queries → pass to LLM for error summarisation.
-           - Other queries → ask for clarification.
+        3. Check session memory for follow-up context.
+        4. Plan: classify question type → create multi-step retrieval plan.
+        5. Execute: agent runs plan steps sequentially, building evidence.
+        6. Generate answer from structured evidence (LLM or extractive).
+        7. Store turn in session memory for follow-up support.
 
     Args:
         question:  The user's question.
@@ -251,7 +278,7 @@ def answer_question(
             sources=[],
         )
 
-    # ── Step 1: Classify ──────────────────────────────────────────────────────
+    # ── Step 1: Classify (greeting / off-topic / conversational) ─────────────
     _step("classify", "Classifying question...")
     category = classify_query(question)
     _step("classify_done", f"Category: {category.value}")
@@ -293,165 +320,96 @@ def answer_question(
             sources=[],
         ))
 
-    # ── Step 1b: Architecture query (answer from cached summary) ──────────────
-    if _is_architecture_query(question):
-        _step("architecture", "Architecture query detected — checking cached summary")
-        arch = get_architecture(namespace)
-        if arch:
-            _step("architecture_hit", f"Serving cached architecture ({arch.total_files} files, {len(arch.modules)} modules)")
-            print(f"  [bakup:debug] classification=architecture | docs_retrieved=0 | llm_called=no")
-            return _result(RAGResponse(
-                answer=arch.summary_text(),
-                confidence=1.0,
-                no_data=False,
-                mode="architecture",
-                sources=[],
-            ))
-        _step("architecture_miss", "No cached architecture — falling through to RAG")
+    # ── Step 2: Session memory — check for follow-up context ─────────────────
+    session = get_session(namespace)
+    session_context = ""
+    is_follow_up = session.is_follow_up(question)
 
-    # ── Step 1c: Structural query (answer from symbol graph) ──────────────────
-    if _is_structural_query(question):
-        _step("symbol_graph", "Structural query detected — querying symbol graph")
-        graph_answer = query_symbol_graph(namespace, question)
-        if graph_answer:
-            _step("symbol_graph_hit", f"Symbol graph answered ({len(graph_answer)} chars)")
-            print(f"  [bakup:debug] classification=structural | docs_retrieved=0 | llm_called=no")
+    if is_follow_up and session.turn_count > 0:
+        _step("session", f"Follow-up detected — injecting context from {session.turn_count} prior turn(s)")
+        session_context = session.format_context()
+        prior = session.get_prior_context_for_follow_up()
+        _step("session_context", f"Prior type: {prior.get('prior_type', 'unknown')}, "
+              f"prior files: {prior.get('prior_files', [])[:3]}")
+    else:
+        _step("session", f"New question (session has {session.turn_count} turns)")
+
+    # ── Step 3: Plan — classify question type and create retrieval plan ───────
+    _step("planner", "Creating retrieval plan...")
+    question_type = classify_question_type(question)
+    plan = create_plan(question, question_type)
+    _step("plan_done",
+          f"Type: {plan.question_type.value} | Steps: {len(plan.steps)} | "
+          f"Fast-path: {plan.fast_path}",
+          reasoning=plan.reasoning,
+          steps=[{"type": s.step_type.value, "desc": s.description} for s in plan.steps])
+
+    # ── Fast paths (architecture, structural — no multi-step needed) ──────────
+    if plan.fast_path:
+        if plan.question_type == QuestionType.ARCHITECTURE:
+            _step("architecture", "Architecture query — checking cached summary")
+            arch = get_architecture(namespace)
+            if arch:
+                _step("architecture_hit", f"Serving cached architecture ({arch.total_files} files, {len(arch.modules)} modules)")
+                add_turn(namespace, question, arch.summary_text(),
+                         question_type="architecture", evidence_summary="cached architecture summary")
+                return _result(RAGResponse(
+                    answer=arch.summary_text(),
+                    confidence=1.0,
+                    no_data=False,
+                    mode="architecture",
+                    sources=[],
+                ))
+            _step("architecture_miss", "No cached architecture — falling through to agentic pipeline")
+
+        if plan.question_type == QuestionType.STRUCTURAL:
+            _step("symbol_graph", "Structural query — querying symbol graph")
+            graph_answer = query_symbol_graph(namespace, question)
+            if graph_answer:
+                _step("symbol_graph_hit", f"Symbol graph answered ({len(graph_answer)} chars)")
+                add_turn(namespace, question, graph_answer,
+                         question_type="structural", evidence_summary="symbol graph query")
+                return _result(RAGResponse(
+                    answer=graph_answer,
+                    confidence=1.0,
+                    no_data=False,
+                    mode="symbol_graph",
+                    sources=[],
+                ))
+            _step("symbol_graph_miss", "Symbol graph cannot answer — falling through")
+
+    # ── Step 4: Agent — execute multi-step retrieval plan ─────────────────────
+    _step("agent", f"Executing {len(plan.steps)}-step retrieval plan...")
+    evidence = execute_plan(plan, question, namespace, top_k=top_k)
+
+    # Log agent step results
+    for sr in evidence.step_results:
+        _step(f"agent_{sr.step_type}",
+              f"{sr.description} ({sr.ms:.0f}ms, {sr.chunks_found} total chunks)",
+              **sr.details)
+
+    _step("agent_done",
+          f"Evidence: {len(evidence.logs)} logs, {len(evidence.code)} code, "
+          f"{len(evidence.references_found)} refs, {len(evidence.dependencies)} deps, "
+          f"cross_analysis={'yes' if evidence.has_cross_analysis else 'no'} "
+          f"({evidence.total_ms:.0f}ms)")
+
+    # ── Step 5: Generate answer from structured evidence ──────────────────────
+
+    # Combine all evidence chunks for threshold check
+    all_chunks = evidence.logs + evidence.code
+    if not all_chunks:
+        if evidence.graph_answer:
+            add_turn(namespace, question, evidence.graph_answer,
+                     question_type=plan.question_type.value,
+                     evidence_summary="symbol graph fallback")
             return _result(RAGResponse(
-                answer=graph_answer,
+                answer=evidence.graph_answer,
                 confidence=1.0,
                 no_data=False,
                 mode="symbol_graph",
                 sources=[],
             ))
-        _step("symbol_graph_miss", "Symbol graph cannot answer — falling through to RAG")
-
-    # ── Step 2: Embed & retrieve ──────────────────────────────────────────────
-    _step("embed", "Embedding query for semantic search...")
-    query_vec = embed_query(question)
-
-    count = collection_count(namespace)
-    _step("retrieve", f"Searching {count} indexed documents...")
-    raw_chunks = query_chunks(query_vec, namespace=namespace, top_k=top_k)
-    _step("retrieve_done", f"Semantic search returned {len(raw_chunks)} candidates")
-
-    # ── Step 2b: Keyword-enhanced search for log queries ──────────────────────
-    is_log_q = _is_log_query(question)
-    kw_chunks = []
-    sev_chunks = []
-
-    if is_log_q:
-        search_keywords = _extract_search_keywords(question)
-        if search_keywords:
-            _step("keyword_search", f"Log-style query — enhancing with keyword search: {search_keywords[:5]}")
-            kw_chunks = keyword_search(namespace, search_keywords, top_k=top_k)
-            _step("keyword_done", f"Keyword search found {len(kw_chunks)} additional matches")
-
-        # Also pull error-severity chunks for cross-file distribution
-        _step("severity_search", "Searching for error-severity chunks across all files...")
-        sev_chunks = severity_search(namespace, severity="error", top_k=top_k * 2)
-        _step("severity_done", f"Severity search found {len(sev_chunks)} error chunks")
-
-    # ── Step 2c: Merge & deduplicate ──────────────────────────────────────────
-    all_raw = raw_chunks + kw_chunks + sev_chunks
-    seen = set()
-    deduped = []
-    for c in all_raw:
-        key = (c.source_file, c.line_start, c.line_end)
-        if key not in seen:
-            seen.add(key)
-            deduped.append(c)
-
-    if len(deduped) != len(all_raw):
-        _step("dedup", f"Deduplicated: {len(all_raw)} → {len(deduped)} unique chunks")
-
-    # ── Step 3: Rank by confidence ────────────────────────────────────────────
-    _step("rank", "Ranking results by relevance...")
-    ranked = rank_results(deduped)
-
-    if ranked:
-        _step("rank_done",
-              f"Top: {ranked[0].confidence:.0%} ({ranked[0].confidence_label}) in {ranked[0].source_file}, "
-              f"Bottom: {ranked[-1].confidence:.0%}",
-              retrieved_count=len(ranked),
-              top_confidence=ranked[0].confidence,
-              top_file=ranked[0].source_file)
-    else:
-        _step("rank_done", "No results to rank")
-
-    # ── Step 4: Threshold check ───────────────────────────────────────────────
-    if not has_relevant_results(ranked):
-        if ranked:
-            # ── Log queries: analyse + summarise log entries instead of giving up
-            if is_log_q:
-                log_entries = [r for r in ranked if r.source_type == "log"]
-                analysis_chunks = log_entries if log_entries else ranked
-
-                # ── Run analysis pipeline ─────────────────────────────────
-                _step("trend_analysis", f"Detecting error trends across {len(analysis_chunks)} chunks...")
-                trend_report = analyze_error_trends(analysis_chunks)
-                _step("trend_done",
-                      f"Trends: {trend_report.hourly_counts.total_errors} errors, "
-                      f"{len(trend_report.spikes)} spikes, "
-                      f"{len(trend_report.repeating_failures)} repeating failures",
-                      trends=trend_report.to_dict())
-
-                _step("cluster_analysis", "Clustering log events by temporal proximity and keywords...")
-                cluster_report = cluster_log_events(analysis_chunks)
-                _step("cluster_done",
-                      f"Found {cluster_report.cluster_count} incident cluster(s)",
-                      clusters=cluster_report.to_dict())
-
-                _step("confidence_scoring", "Computing multi-factor confidence score...")
-                conf_result = calculate_confidence(analysis_chunks, question=question)
-                _step("confidence_done",
-                      f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})",
-                      confidence=conf_result.to_dict())
-
-                # File-level error aggregation
-                _step("file_aggregation", f"Aggregating errors across files from {len(analysis_chunks)} chunks...")
-                agg_report = aggregate_by_file(analysis_chunks)
-                _step("file_aggregation_done",
-                      f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s), dominant: {agg_report.dominant_file or 'N/A'}")
-
-                _step("log_summarize",
-                      f"Low embedding confidence but {len(analysis_chunks)} log entries found — "
-                      "passing enriched context to LLM for structured summary...")
-                from core.llm.llm_service import get_llm_service
-                svc = get_llm_service()
-                llm_resp = svc.generate_log_summary(
-                    question,
-                    analysis_chunks[:_LLM_CONTEXT_RESULTS],
-                    trend_summary=trend_report.summary_text(),
-                    cluster_summary=cluster_report.summary_text(),
-                    confidence_summary=conf_result.reasoning,
-                    file_aggregation_summary=agg_report.summary_text,
-                )
-                return _result(RAGResponse(
-                    answer=llm_resp.answer,
-                    confidence=conf_result.confidence_score,
-                    no_data=llm_resp.no_data,
-                    mode=llm_resp.mode,
-                    sources=_build_sources(analysis_chunks[:5]),
-                ))
-
-            # ── Non-log queries: ask for clarification ────────────────────────
-            _step("clarify", "Low confidence — asking LLM for clarification...")
-            from core.llm.llm_service import get_llm_service
-            svc      = get_llm_service()
-            llm_resp = svc.generate_clarification(
-                question=question,
-                near_miss_chunks=ranked[:5],
-                best_confidence=ranked[0].confidence,
-            )
-            return _result(RAGResponse(
-                answer     = llm_resp.answer,
-                confidence = ranked[0].confidence,
-                no_data    = False,   # We ARE returning useful content (clarification)
-                mode       = "clarification",
-                sources    = _build_sources(ranked[:3]),
-            ))
-
-        # Truly empty — no chunks at all
         _step("no_data", "No indexed content matched the query")
         return _result(RAGResponse(
             answer="No similar incident found.",
@@ -461,124 +419,150 @@ def answer_question(
             sources=[],
         ))
 
-    # ── Step 5: Generate answer from relevant results ─────────────────────────
-    relevant = top_relevant(ranked, n=_LLM_CONTEXT_RESULTS)
+    top_confidence = max(c.confidence for c in all_chunks) if all_chunks else 0.0
 
-    # ── For log queries, run the analysis pipeline even when confidence is high
-    if is_log_q:
-        _step("trend_analysis", f"Detecting error trends across {len(relevant)} chunks...")
-        trend_report = analyze_error_trends(relevant)
-        _step("trend_done",
-              f"Trends: {trend_report.hourly_counts.total_errors} errors, "
-              f"{len(trend_report.spikes)} spikes, "
-              f"{len(trend_report.repeating_failures)} repeating failures",
-              trends=trend_report.to_dict())
+    if not has_relevant_results(all_chunks):
+        # Low confidence — try LLM analysis for logs, clarification for others
+        if evidence.has_logs:
+            _step("low_conf_log", "Low embedding confidence but log entries found — generating analysis")
+            return _generate_agentic_answer(
+                question, evidence, session_context, plan,
+                namespace, _step, _result, steps, debug, t0,
+            )
 
-        _step("cluster_analysis", "Clustering log events by temporal proximity and keywords...")
-        cluster_report = cluster_log_events(relevant)
-        _step("cluster_done",
-              f"Found {cluster_report.cluster_count} incident cluster(s)",
-              clusters=cluster_report.to_dict())
-
-        _step("confidence_scoring", "Computing multi-factor confidence score...")
-        conf_result = calculate_confidence(relevant, question=question)
-        _step("confidence_done",
-              f"Confidence: {conf_result.confidence_score:.0%} ({conf_result.confidence_level})",
-              confidence=conf_result.to_dict())
-
-        # File-level error aggregation
-        _step("file_aggregation", f"Aggregating errors across files from {len(relevant)} chunks...")
-        agg_report = aggregate_by_file(relevant)
-        _step("file_aggregation_done",
-              f"{agg_report.files_affected} file(s), {agg_report.total_errors} error(s), dominant: {agg_report.dominant_file or 'N/A'}")
-
-        # ── Log-to-code cross analysis ────────────────────────────────────────
-        cross_context = ""
-        log_chunks = [r for r in relevant if r.source_type == "log"]
-        code_chunks = [r for r in ranked if r.source_type == "code"]
-        if log_chunks and code_chunks:
-            _step("cross_analysis", f"Linking {len(log_chunks)} log chunks to {len(code_chunks)} code chunks...")
-            links = link_logs_to_code(log_chunks, code_chunks)
-            linked_count = sum(1 for l in links if l.code_chunks)
-            if links and linked_count > 0:
-                cross_context = build_cross_analysis_context(links)
-                _step("cross_analysis_done", f"{linked_count}/{len(links)} log entries linked to code")
-            else:
-                _step("cross_analysis_done", "No code references found in log entries")
-
-        _step("generate", f"Generating structured log analysis from {len(relevant)} chunks...")
+        _step("clarify", "Low confidence — asking LLM for clarification...")
         from core.llm.llm_service import get_llm_service
         svc = get_llm_service()
-
-        if cross_context:
-            # Use cross-analysis mode when we have log-code links
-            llm_resp = svc.generate_log_summary(
-                question,
-                relevant,
-                trend_summary=trend_report.summary_text(),
-                cluster_summary=cluster_report.summary_text(),
-                confidence_summary=conf_result.reasoning,
-                file_aggregation_summary=agg_report.summary_text,
-                cross_analysis_context=cross_context,
-            )
-        else:
-            llm_resp = svc.generate_log_summary(
-                question,
-                relevant,
-                trend_summary=trend_report.summary_text(),
-                cluster_summary=cluster_report.summary_text(),
-                confidence_summary=conf_result.reasoning,
-                file_aggregation_summary=agg_report.summary_text,
-            )
-        _step("generate_done", f"Log analysis generated (mode={llm_resp.mode})")
-
-        # Debug: file-level and severity breakdown
-        from collections import Counter
-        file_names = [getattr(r, 'file_name', '') or r.source_file for r in relevant]
-        sev_names = [getattr(r, 'severity', 'unknown') or 'unknown' for r in relevant]
-        print(f"  [bakup:debug] classification=project(log) | docs_retrieved={len(ranked)} | "
-              f"files_contributing={dict(Counter(file_names))} | "
-              f"severity_dist={dict(Counter(sev_names))} | "
-              f"confidence={conf_result.confidence_score:.2f}({conf_result.confidence_level}) | "
-              f"cross_file_factor={conf_result.factors.get('cross_file', 'N/A')} | "
-              f"llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
-
+        llm_resp = svc.generate_clarification(
+            question=question,
+            near_miss_chunks=all_chunks[:5],
+            best_confidence=top_confidence,
+        )
         return _result(RAGResponse(
             answer=llm_resp.answer,
-            confidence=conf_result.confidence_score,
-            no_data=llm_resp.no_data,
-            mode=llm_resp.mode,
-            sources=_build_sources(relevant),
+            confidence=top_confidence,
+            no_data=False,
+            mode="clarification",
+            sources=_build_sources(all_chunks[:3]),
         ))
 
-    _step("generate", f"Generating answer from {len(relevant)} relevant chunks...")
+    # Sufficient evidence — generate answer
+    return _generate_agentic_answer(
+        question, evidence, session_context, plan,
+        namespace, _step, _result, steps, debug, t0,
+    )
 
-    # ── Context bundling for code queries ─────────────────────────────────────
-    code_results = [r for r in relevant if r.source_type == "code"]
-    if code_results:
-        _step("bundle", f"Bundling context for {len(code_results)} code chunk(s)...")
-        bundles = bundle_context(ranked, top_n=_LLM_CONTEXT_RESULTS)
-        if bundles:
-            bundled = bundles_to_ranked_list(bundles)
-            sibling_count = sum(len(b.siblings) for b in bundles)
-            import_count = sum(len(b.import_chunks) for b in bundles)
-            _step("bundle_done",
-                  f"{len(bundles)} bundle(s), {sibling_count} sibling(s), {import_count} import ref(s)")
-            relevant = bundled  # Replace with richer context
+
+def _generate_agentic_answer(
+    question: str,
+    evidence: StructuredEvidence,
+    session_context: str,
+    plan: RetrievalPlan,
+    namespace: str,
+    _step,
+    _result,
+    steps: list,
+    debug: bool,
+    t0: float,
+) -> RAGResponse:
+    """
+    Generate an answer from structured evidence using the appropriate
+    prompt mode (log analysis, cross-analysis, code, or general).
+    """
+    all_chunks = evidence.logs + evidence.code
+    top_confidence = max(c.confidence for c in all_chunks) if all_chunks else 0.0
+
+    # Build structured context for LLM
+    context_block = build_evidence_context(evidence)
+
+    # Inject session context if this is a follow-up
+    if session_context:
+        context_block = session_context + "\n\n" + context_block
+
+    _step("generate", f"Generating answer from structured evidence "
+          f"(type={plan.question_type.value}, "
+          f"{evidence.total_chunks} chunks, "
+          f"cross_analysis={'yes' if evidence.has_cross_analysis else 'no'})")
 
     from core.llm.llm_service import get_llm_service
-    svc      = get_llm_service()
-    llm_resp = svc.generate_response(relevant, question)
+    svc = get_llm_service()
+
+    # Choose the right generation mode based on evidence type
+    if plan.question_type == QuestionType.ROOT_CAUSE:
+        # Root-cause mode — use cross-analysis prompt with full evidence
+        _step("mode", "Root-cause reasoning mode — correlating logs + code + deps")
+        llm_resp = svc.generate_agentic_answer(
+            question=question,
+            context_block=context_block,
+            mode="root_cause",
+        )
+
+    elif evidence.has_cross_analysis:
+        # Log-to-code links found — use cross-analysis prompt
+        _step("mode", "Cross-analysis mode — log errors linked to source code")
+        relevant_chunks = (evidence.logs + evidence.code)[:_LLM_CONTEXT_RESULTS]
+        llm_resp = svc.generate_log_summary(
+            question,
+            relevant_chunks,
+            trend_summary=evidence.trend_summary,
+            cluster_summary=evidence.cluster_summary,
+            confidence_summary=evidence.confidence_summary,
+            file_aggregation_summary=evidence.file_aggregation_summary,
+            cross_analysis_context=evidence.cross_analysis_context,
+        )
+
+    elif evidence.has_logs and plan.question_type == QuestionType.LOG_ANALYSIS:
+        # Pure log analysis
+        _step("mode", "Log analysis mode — structured incident report")
+        relevant_chunks = evidence.logs[:_LLM_CONTEXT_RESULTS]
+        llm_resp = svc.generate_log_summary(
+            question,
+            relevant_chunks,
+            trend_summary=evidence.trend_summary,
+            cluster_summary=evidence.cluster_summary,
+            confidence_summary=evidence.confidence_summary,
+            file_aggregation_summary=evidence.file_aggregation_summary,
+        )
+
+    else:
+        # Code analysis or general — use standard RAG with bundled context
+        _step("mode", "Code/general analysis mode")
+        relevant_chunks = (evidence.code + evidence.logs)[:_LLM_CONTEXT_RESULTS]
+        llm_resp = svc.generate_response(relevant_chunks, question)
+
     _step("generate_done", f"Answer generated (mode={llm_resp.mode})")
-    print(f"  [bakup:debug] classification=project | docs_retrieved={len(ranked)} | "
-          f"bundled={len(relevant)} | llm_called={'yes' if llm_resp.mode == 'llm' else 'no (extractive)'}")
+
+    # Debug logging
+    from collections import Counter
+    file_names = [getattr(r, 'file_name', '') or r.source_file for r in all_chunks[:10]]
+    print(f"  [bakup:debug] classification=project({plan.question_type.value}) | "
+          f"plan_steps={len(plan.steps)} | "
+          f"logs={len(evidence.logs)} | code={len(evidence.code)} | "
+          f"refs={len(evidence.references_found)} | deps={len(evidence.dependencies)} | "
+          f"cross_analysis={'yes' if evidence.has_cross_analysis else 'no'} | "
+          f"session_follow_up={'yes' if session_context else 'no'} | "
+          f"files={dict(Counter(file_names))} | "
+          f"llm_called={'yes' if llm_resp.mode != 'extractive' else 'no (extractive)'}")
+
+    # Store in session memory
+    source_files = list({r.source_file for r in all_chunks[:10]})
+    evidence_summary = (
+        f"{len(evidence.logs)} logs, {len(evidence.code)} code chunks, "
+        f"{len(evidence.references_found)} refs, {len(evidence.dependencies)} deps"
+    )
+    add_turn(
+        namespace, question, llm_resp.answer,
+        source_files=source_files,
+        question_type=plan.question_type.value,
+        evidence_summary=evidence_summary,
+    )
 
     return _result(RAGResponse(
-        answer     = llm_resp.answer,
-        confidence = relevant[0].confidence,
-        no_data    = llm_resp.no_data,
-        mode       = llm_resp.mode,
-        sources    = _build_sources(relevant),
+        answer=llm_resp.answer,
+        confidence=top_confidence,
+        no_data=llm_resp.no_data,
+        mode=llm_resp.mode,
+        sources=_build_sources(all_chunks[:_LLM_CONTEXT_RESULTS]),
     ))
 
 

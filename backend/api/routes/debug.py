@@ -9,10 +9,17 @@ These endpoints help identify:
   - Source-type breakdown (code vs log)
   - Sample indexed entries
   - Full retrieval diagnostics for a query
+  - Agentic retrieval plan and reasoning trace
+  - Session memory state
 
 Endpoints:
-  GET  /debug/index/{namespace}    — index diagnostics
-  POST /debug/retrieval            — retrieval diagnostics for a query
+  GET  /debug/index/{namespace}        — index diagnostics
+  POST /debug/retrieval                — retrieval diagnostics for a query
+  GET  /debug/symbols/{namespace}      — symbol graph summary
+  GET  /debug/architecture/{namespace} — architecture summary
+  POST /debug/plan                     — agentic retrieval plan for a query
+  GET  /debug/session/{namespace}      — session memory state
+  POST /debug/session/{namespace}/clear — clear session memory
 """
 from __future__ import annotations
 
@@ -306,4 +313,73 @@ async def debug_architecture(namespace: str) -> dict:
         "config_files": arch.config_files,
         "core_dependencies": arch.core_dependencies,
         "summary_text": arch.summary_text(),
+    }
+
+
+# ── Agentic retrieval plan diagnostics ────────────────────────────────────────
+
+@router.post("/plan")
+async def debug_plan(body: dict) -> dict:
+    """
+    Show the agentic retrieval plan for a question WITHOUT executing it.
+
+    Shows:
+      - Question type classification
+      - Planned retrieval steps
+      - Whether it's a fast-path query
+      - Planner reasoning
+    """
+    question = body.get("question", "")
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question required")
+
+    from core.retrieval.planner import classify_question, create_plan
+
+    question_type = classify_question(question)
+    plan = create_plan(question, question_type)
+
+    return {
+        "question": question,
+        "question_type": plan.question_type.value,
+        "fast_path": plan.fast_path,
+        "reasoning": plan.reasoning,
+        "steps": [
+            {
+                "step_type": s.step_type.value,
+                "description": s.description,
+                "depends_on": s.depends_on,
+            }
+            for s in plan.steps
+        ],
+        "step_count": len(plan.steps),
+    }
+
+
+# ── Session memory diagnostics ────────────────────────────────────────────────
+
+@router.get("/session/{namespace}")
+async def debug_session(namespace: str) -> dict:
+    """
+    Return session memory state for a namespace.
+
+    Shows:
+      - Turn count and recent turns
+      - Recent files and question types
+      - Whether a follow-up would be detected for a new question
+    """
+    from core.retrieval.session import get_session_info
+
+    return get_session_info(namespace)
+
+
+@router.post("/session/{namespace}/clear")
+async def debug_clear_session(namespace: str) -> dict:
+    """Clear session memory for a namespace."""
+    from core.retrieval.session import clear_session
+
+    clear_session(namespace)
+    return {
+        "namespace": namespace,
+        "status": "cleared",
+        "message": f"Session memory for '{namespace}' has been cleared.",
     }

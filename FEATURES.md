@@ -48,6 +48,12 @@ Comprehensive list of all implemented features in bakup.ai.
 | Symbol graph queries | ✅ | Answers structural questions without LLM (which files use X?, what depends on Y?) |
 | Architecture queries | ✅ | Serves cached project overview for "explain the architecture" questions |
 | Log-to-code cross analysis | ✅ | Links log errors to source code via stack trace / file:line extraction |
+| **Agentic retrieval planner** | ✅ | Classifies question type and generates multi-step retrieval plans |
+| **Multi-step agent executor** | ✅ | Executes retrieval plans sequentially, building structured evidence |
+| **Structured evidence bundling** | ✅ | Organises evidence by category: logs, code, deps, architecture, cross-analysis |
+| **Root-cause reasoning mode** | ✅ | Auto-correlates stack traces with code, retrieves deps, asks LLM for root cause |
+| **Session memory** | ✅ | Per-namespace conversation context for follow-up question support |
+| **Follow-up detection** | ✅ | Heuristic detection of follow-up questions using pronouns, short queries, markers |
 
 ---
 
@@ -60,6 +66,7 @@ Comprehensive list of all implemented features in bakup.ai.
 | Architecture detection | ✅ | Detects "architecture", "project structure", "explain the project" |
 | Structural detection | ✅ | Detects "which files use/import X?", "what depends on X?" |
 | Log query detection | ✅ | Detects error/exception/traceback/crash keywords |
+| **Agentic question typing** | ✅ | Classifies: log_analysis, code_analysis, root_cause, architecture, structural, general |
 
 ---
 
@@ -76,6 +83,7 @@ Comprehensive list of all implemented features in bakup.ai.
 | Cross-analysis prompt | ✅ | Root-cause analysis: error→code mapping, call chains, suggested fixes |
 | Conversational prompt | ✅ | Professional identity-aware responses for meta questions |
 | Clarification mode | ✅ | Asks user to refine query when confidence is low |
+| **Agentic reasoning prompt** | ✅ | Multi-step root-cause analysis with evidence chain, impact assessment, recommendations |
 
 ---
 
@@ -100,6 +108,10 @@ Comprehensive list of all implemented features in bakup.ai.
 | Symbol graph diagnostics | ✅ | `GET /debug/symbols/{ns}` — node/edge counts, top files, top imports |
 | Architecture diagnostics | ✅ | `GET /debug/architecture/{ns}` — full architecture summary as JSON |
 | Pipeline step tracing | ✅ | `debug=true` on `/ask` returns step-by-step timing and data |
+| **Agentic plan diagnostics** | ✅ | `POST /debug/plan` — shows retrieval plan without executing |
+| **Session diagnostics** | ✅ | `GET /debug/session/{ns}` — shows session memory state and turns |
+| **Session clear** | ✅ | `POST /debug/session/{ns}/clear` — clears session memory |
+| **Agent step tracing** | ✅ | Each agent step logged with timing, chunk counts, and evidence state |
 | Console debug logging | ✅ | Detailed per-request logging: classification, retrieval, LLM calls |
 
 ---
@@ -130,4 +142,4 @@ Comprehensive list of all implemented features in bakup.ai.
 
 ---
 
-*Last updated: Project Intelligence v2 upgrade*
+*Last updated: Agentic Retrieval v3 upgrade*
