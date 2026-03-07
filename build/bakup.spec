@@ -124,6 +124,10 @@ hidden_imports = [
     "huggingface_hub",
     "tokenizers",
     "safetensors",
+
+    # Code-aware ingestion
+    "core.ingestion.code_parser",
+    "core.ingestion.code_chunker",
 ]
 
 # Collect all submodules for complex packages

@@ -115,6 +115,19 @@ def add_chunks(
                 meta_dict["detected_timestamp"] = chunk.detected_timestamp
             if chunk.last_modified:
                 meta_dict["last_modified"] = chunk.last_modified
+            # Code-aware metadata
+            if getattr(chunk, 'language', ''):
+                meta_dict["language"] = chunk.language
+            if getattr(chunk, 'function_name', ''):
+                meta_dict["function_name"] = chunk.function_name
+            if getattr(chunk, 'class_name', ''):
+                meta_dict["class_name"] = chunk.class_name
+            if getattr(chunk, 'chunk_kind', ''):
+                meta_dict["chunk_kind"] = chunk.chunk_kind
+            if getattr(chunk, 'docstring', ''):
+                meta_dict["docstring"] = chunk.docstring[:500]
+            if getattr(chunk, 'imports', ''):
+                meta_dict["imports"] = chunk.imports[:500]
             metas.append(meta_dict)
             vecs.append(vec)
 
@@ -180,6 +193,12 @@ def query_chunks(
             file_name=meta.get("file_name", ""),
             severity=meta.get("severity", "info"),
             detected_timestamp=meta.get("detected_timestamp"),
+            language=meta.get("language", ""),
+            function_name=meta.get("function_name", ""),
+            class_name=meta.get("class_name", ""),
+            chunk_kind=meta.get("chunk_kind", ""),
+            docstring=meta.get("docstring", ""),
+            imports=meta.get("imports", ""),
         ))
 
     return chunks
@@ -284,6 +303,12 @@ def keyword_search(
                 file_name=meta.get("file_name", ""),
                 severity=meta.get("severity", "info"),
                 detected_timestamp=meta.get("detected_timestamp"),
+                language=meta.get("language", ""),
+                function_name=meta.get("function_name", ""),
+                class_name=meta.get("class_name", ""),
+                chunk_kind=meta.get("chunk_kind", ""),
+                docstring=meta.get("docstring", ""),
+                imports=meta.get("imports", ""),
             ))
 
     return chunks[:top_k]
@@ -326,6 +351,12 @@ def severity_search(
             file_name=meta.get("file_name", ""),
             severity=meta.get("severity", "info"),
             detected_timestamp=meta.get("detected_timestamp"),
+            language=meta.get("language", ""),
+            function_name=meta.get("function_name", ""),
+            class_name=meta.get("class_name", ""),
+            chunk_kind=meta.get("chunk_kind", ""),
+            docstring=meta.get("docstring", ""),
+            imports=meta.get("imports", ""),
         ))
 
     return chunks

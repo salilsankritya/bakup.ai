@@ -37,6 +37,13 @@ class Chunk:
     last_modified: Optional[str] = None  # ISO 8601 mtime of file on disk
     detected_timestamp: Optional[str] = None  # first timestamp found in chunk
     severity: str = "info"            # "error" | "warning" | "info"
+    # ── Code-aware metadata (populated during code ingestion) ─────────
+    language: str = ""                # "python" | "javascript" | etc.
+    function_name: str = ""           # function or method name
+    class_name: str = ""              # enclosing class name
+    chunk_kind: str = ""              # "function" | "class" | "method" | "module" | "config_block"
+    docstring: str = ""               # extracted docstring or JSDoc
+    imports: str = ""                 # newline-separated import lines
 
 
 def chunk_text(

@@ -49,6 +49,13 @@ class RankedResult:
     file_name: str = ""
     severity: str = "info"
     detected_timestamp: Optional[str] = None
+    # ── Code-aware metadata ───────────────────────────────────────────
+    language: str = ""
+    function_name: str = ""
+    class_name: str = ""
+    chunk_kind: str = ""
+    docstring: str = ""
+    imports: str = ""
 
 
 def distance_to_confidence(distance: float) -> float:
@@ -70,22 +77,40 @@ def _label(confidence: float) -> str:
 def rank_results(chunks: List[RetrievedChunk]) -> List[RankedResult]:
     """
     Convert retrieved chunks to RankedResults, sorted by confidence descending.
+    Applies code-aware boosting:
+      - functions/methods/classes get a +0.05 boost
+      - chunks with docstrings get a +0.02 boost
     """
-    ranked = [
-        RankedResult(
+    ranked = []
+    for c in chunks:
+        conf = distance_to_confidence(c.distance)
+
+        # Code-aware boosting
+        kind = getattr(c, 'chunk_kind', '') or ''
+        if kind in ('function', 'method', 'class'):
+            conf = min(1.0, round(conf + 0.05, 4))
+        if getattr(c, 'docstring', ''):
+            conf = min(1.0, round(conf + 0.02, 4))
+
+        ranked.append(RankedResult(
             text=c.text,
             source_file=c.source_file,
             line_start=c.line_start,
             line_end=c.line_end,
             source_type=c.source_type,
-            confidence=distance_to_confidence(c.distance),
-            confidence_label=_label(distance_to_confidence(c.distance)),
+            confidence=conf,
+            confidence_label=_label(conf),
             file_name=getattr(c, 'file_name', '') or '',
             severity=getattr(c, 'severity', 'info') or 'info',
             detected_timestamp=getattr(c, 'detected_timestamp', None),
-        )
-        for c in chunks
-    ]
+            language=getattr(c, 'language', '') or '',
+            function_name=getattr(c, 'function_name', '') or '',
+            class_name=getattr(c, 'class_name', '') or '',
+            chunk_kind=getattr(c, 'chunk_kind', '') or '',
+            docstring=getattr(c, 'docstring', '') or '',
+            imports=getattr(c, 'imports', '') or '',
+        ))
+
     ranked.sort(key=lambda r: r.confidence, reverse=True)
     return ranked
 

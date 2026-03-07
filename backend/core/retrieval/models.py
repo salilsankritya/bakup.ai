@@ -23,3 +23,10 @@ class RetrievedChunk:
     file_name: str = ""
     severity: str = "info"  # "error" | "warning" | "info"
     detected_timestamp: Optional[str] = None
+    # ── Code-aware metadata ───────────────────────────────────────────
+    language: str = ""                # "python" | "javascript" | etc.
+    function_name: str = ""           # function or method name
+    class_name: str = ""              # enclosing class name
+    chunk_kind: str = ""              # "function" | "class" | "method" | "module"
+    docstring: str = ""               # extracted docstring
+    imports: str = ""                 # newline-separated imports

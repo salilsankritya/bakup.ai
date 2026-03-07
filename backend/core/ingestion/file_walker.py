@@ -8,16 +8,26 @@ Security:
   - Resolves symlinks and rejects any path that escapes the declared root.
   - Skips binary files, generated artefacts, and VCS internals.
   - Never follows symlinks that point outside the project root.
+
+Code-aware ingestion:
+  - Routes code files through the language-aware code chunker.
+  - Routes log files through the log parser.
+  - Produces structured chunks with function/class/method metadata.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Iterator, List
 
 from core.ingestion.chunker import Chunk, chunk_file
+from core.ingestion.code_chunker import chunk_file_code_aware
 from core.ingestion.log_parser import parse_log_file
+
+logger = logging.getLogger("bakup.ingestion")
 
 # Extensions that are treated as log files and parsed with the log parser
 LOG_EXTENSIONS: frozenset = frozenset({".log", ".out"})
@@ -68,8 +78,19 @@ def walk_project(project_root: Path) -> Iterator[Chunk]:
     """
     Yield Chunk objects for every readable text file under project_root.
     Read-only: only Path.read_text() is ever called.
+
+    Code files are routed through the language-aware code chunker.
+    Log files are routed through the log parser.
     """
     root = project_root.resolve()
+
+    # Stats counters for debug logging
+    file_count = 0
+    total_chunks = 0
+    functions_detected = 0
+    classes_detected = 0
+    methods_detected = 0
+    chunks_per_file: Counter = Counter()
 
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         current = Path(dirpath)
@@ -98,11 +119,47 @@ def walk_project(project_root: Path) -> Iterator[Chunk]:
             except OSError:
                 continue
 
+            file_count += 1
+            relative = str(filepath.relative_to(root))
+            file_chunk_count = 0
+
             # Route log files through the log parser for per-entry chunking
             if _is_log_file(filepath):
-                yield from parse_log_file(filepath, root)
+                for chunk in parse_log_file(filepath, root):
+                    file_chunk_count += 1
+                    yield chunk
             else:
-                yield from chunk_file(filepath, root, source_type="code")
+                # Use code-aware chunker for all code files
+                for chunk in chunk_file_code_aware(filepath, root):
+                    file_chunk_count += 1
+                    # Count code structures
+                    kind = getattr(chunk, 'chunk_kind', '')
+                    if kind == 'function':
+                        functions_detected += 1
+                    elif kind == 'class':
+                        classes_detected += 1
+                    elif kind == 'method':
+                        methods_detected += 1
+                    yield chunk
+
+            chunks_per_file[relative] = file_chunk_count
+            total_chunks += file_chunk_count
+
+    # Debug summary
+    logger.info(
+        "Code-aware ingestion complete: %d file(s), %d chunk(s) "
+        "[%d function(s), %d class(es), %d method(s)]",
+        file_count, total_chunks,
+        functions_detected, classes_detected, methods_detected,
+    )
+    # Log per-file breakdown (top 20 files by chunk count)
+    if chunks_per_file:
+        top_files = chunks_per_file.most_common(20)
+        logger.info(
+            "Chunks per file (top %d): %s",
+            len(top_files),
+            {f: c for f, c in top_files},
+        )
 
 
 def _is_log_file(filepath: Path) -> bool:

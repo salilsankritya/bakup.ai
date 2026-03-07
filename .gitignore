@@ -18,7 +18,9 @@ downloads/
 # Build artifacts
 dist/
 build/build/
+build/pyibuild/
 build/__pycache__/
+build-log.txt
 
 # OS files
 .DS_Store
