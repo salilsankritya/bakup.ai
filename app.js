@@ -24,9 +24,12 @@
 const VALID_KEY_HASH = '7063d51d1b2da165eee042de5d33cc27281ea80e1a291488c903b7fb5fc31da7';
 
 // Download artefact served when the key validates.
-// Replace url with your real CDN path before deploying.
+// Points to the latest GitHub Release asset.
+// To update: create a new GitHub Release, upload the installer, and
+// update the tag below.  The URL pattern is:
+//   https://github.com/OWNER/REPO/releases/download/TAG/FILENAME
 const DOWNLOAD_CONFIG = {
-  url:      'downloads/bakup-ai-installer.exe', // relative or absolute CDN path
+  url:      'https://github.com/salilsankritya/bakup.ai/releases/latest/download/bakup-ai-installer.exe',
   checksum: '', // populated alongside VALID_KEY_HASH at deploy time
   filename: 'bakup-ai-installer.exe',
 };
