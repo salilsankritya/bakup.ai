@@ -121,6 +121,15 @@ app.include_router(llm_router)
 app.include_router(debug_router)
 app.include_router(download_router)
 
+# ── Static UI (dev mode) ──────────────────────────────────────────────────────
+# Serve the UI from ../ui/ so 127.0.0.1:8000 works in development too.
+# Must be AFTER all API routers (catch-all route).
+from pathlib import Path as _Path
+_ui_dir = _Path(__file__).resolve().parent.parent / "ui"
+if _ui_dir.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=str(_ui_dir), html=True), name="ui")
+
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
