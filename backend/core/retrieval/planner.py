@@ -30,6 +30,7 @@ class QuestionType(str, Enum):
     """Categorisation of the incoming question for plan selection."""
     LOG_ANALYSIS    = "log_analysis"       # errors, exceptions, crash reports
     CODE_ANALYSIS   = "code_analysis"      # how does X work, explain Y
+    CODE_REVIEW     = "code_review"        # is it optimized, review quality
     ROOT_CAUSE      = "root_cause"         # why did X fail, correlate log + code
     ARCHITECTURE    = "architecture"       # project structure, overview
     STRUCTURAL      = "structural"         # which files import X, what depends on Y
@@ -119,6 +120,21 @@ _CODE_PATTERNS = [
     r"\bhow\s+is\s+\w+\s+(?:implemented|defined|used)\b",
 ]
 
+_CODE_REVIEW_PATTERNS = [
+    r"\boptimiz",
+    r"\brefactor",
+    r"\b(code|codebase)\s*(quality|review|smell|health)",
+    r"\breview\s+(the|this|my)\s+(code|codebase|project)",
+    r"\b(is|are)\s+(the|this|it)\s+(code|codebase|project)\s+(good|bad|clean|messy|optimized|well)",
+    r"\b(best\s+practice|anti.?pattern|technical\s+debt)",
+    r"\b(performance|security|scalab|maintainab|readab)\w*\s+(issue|problem|concern|improve)",
+    r"\bimprov\w*\s+(the|this|my|any)\s+(code|codebase|project)",
+    r"\b(any|suggest|give)\s+improve",
+    r"\bcode\s+(is|looks?)\s+(good|bad|ok|fine|terrible)",
+    r"\bhow\s+can\s+i\s+(improve|optimize|make.*better)",
+    r"\bwhat.*wrong\s+with\s+(the|this|my)\s+(code|codebase)",
+]
+
 
 def _matches(text: str, patterns: list) -> bool:
     return any(re.search(p, text) for p in patterns)
@@ -151,7 +167,11 @@ def classify_question(question: str) -> QuestionType:
     if any(kw in q for kw in _LOG_KEYWORDS) or re.search(r"\blog(s|file)?\b", q):
         return QuestionType.LOG_ANALYSIS
 
-    # 5. Code analysis
+    # 5. Code review / quality / optimization
+    if _matches(q, _CODE_REVIEW_PATTERNS):
+        return QuestionType.CODE_REVIEW
+
+    # 6. Code analysis
     if _matches(q, _CODE_PATTERNS):
         return QuestionType.CODE_ANALYSIS
 
@@ -231,6 +251,20 @@ def create_plan(question: str, question_type: Optional[QuestionType] = None) -> 
                          depends_on="search_code"),
             ],
             reasoning="Code question → search code, bundle context, fetch dependencies",
+        )
+
+    if question_type == QuestionType.CODE_REVIEW:
+        return RetrievalPlan(
+            question_type=question_type,
+            steps=[
+                PlanStep(StepType.SEARCH_CODE, "Semantic search for representative code"),
+                PlanStep(StepType.BUNDLE_CONTEXT, "Bundle with siblings and imports",
+                         depends_on="search_code"),
+                PlanStep(StepType.GET_ARCH, "Fetch architecture context for review"),
+                PlanStep(StepType.GET_DEPS, "Check dependency patterns",
+                         depends_on="search_code"),
+            ],
+            reasoning="Code review question → gather broad code samples + arch context for quality analysis",
         )
 
     # GENERAL (fallback — search everything, bundle if code)

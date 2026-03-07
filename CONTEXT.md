@@ -1,24 +1,37 @@
 # bakup.ai — AI Context File
 
-> **Last updated:** 2026-03-04
+> **Last updated:** 2026-03-07
 > **Purpose:** Provides a complete snapshot of the project for any AI assistant to resume work without loss of context.
 
 ---
 
 ## 1. What is bakup.ai?
 
-bakup.ai is a **local-first AI incident intelligence tool** for developers. It indexes project source code and log files, stores them as vector embeddings, and lets engineers ask natural-language questions about errors, incidents, and code — with answers grounded strictly in their own data. No data ever leaves the machine (unless an external LLM like OpenAI is configured).
+bakup.ai is a **local-first AI project intelligence and production support assistant** for developers and DevOps engineers. It indexes project source code and log files, stores them as vector embeddings, and lets engineers ask natural-language questions about errors, incidents, code quality, and architecture — with answers grounded strictly in their own data. It reasons over structured evidence like an experienced engineer, not a keyword search tool. No data ever leaves the machine (unless an external LLM like OpenAI is configured).
 
 ### Core Workflow
 ```
 User uploads/indexes a project folder
   → Files are scanned recursively (code + logs)
   → Text is chunked, embedded (all-MiniLM-L6-v2, dim=384), stored in ChromaDB
+  → Code is parsed for functions, classes, imports, dependencies
+  → Symbol graph + architecture summary auto-generated
   → User asks questions via chat UI
-  → Query is classified (project / greeting / conversational / off_topic)
-  → For project queries: embed → retrieve → rank → analyze → answer
-  → For log queries: keyword search + severity search + trend analysis + clustering + file aggregation → LLM summary
+  → Query is routed by hybrid router (LLM + rule-based fallback):
+      → project_query → planner + agent retrieval pipeline
+      → conversational → LLM direct response (or canned if no LLM)
+      → unrelated → polite scope message
+  → For project queries:
+      → Agentic planner generates multi-step retrieval plan
+      → Agent executor runs plan: semantic search → keyword search → code refs → deps → cross-analysis
+      → Structured evidence built: logs, code, deps, architecture, cross-analysis, trends, clusters
+      → Full evidence context sent to LLM with mode-appropriate prompt
+      → Quality gate checks response completeness; retries if truncated
+      → Structured answer returned with confidence scores and source citations
 ```
+
+### Vision
+bakup.ai is designed to become the **best AI production support assistant in the market**. It should reason over structured evidence, correlate logs with code, trace dependency chains, and produce actionable root-cause analysis — not behave like a keyword search tool.
 
 ---
 
@@ -83,7 +96,9 @@ bakup.ai/
 │   │   ├── models.py       ← RetrievedChunk dataclass
 │   │   ├── vector_store.py ← ChromaDB interface (add, query, keyword, severity search)
 │   │   ├── ranker.py       ← Distance-to-confidence conversion + threshold gate
-│   │   └── rag.py          ← Full RAG pipeline (classify → embed → retrieve → rank → answer)
+│   │   ├── rag.py          ← Full RAG pipeline (classify → plan → agent → evidence → answer)
+│   │   ├── planner.py      ← Agentic question type classifier + multi-step plan generator
+│   │   └── agent.py        ← Multi-step agent executor + structured evidence builder
 │   │
 │   ├── core/analysis/
 │   │   ├── confidence.py   ← 6-factor confidence scoring (incl. cross-file)
@@ -94,10 +109,13 @@ bakup.ai/
 │   ├── core/classifier/
 │   │   └── query_classifier.py ← 4-category query classification (project/greeting/conversational/off_topic)
 │   │
+│   ├── core/router/
+│   │   └── router.py       ← Hybrid query router (LLM + rule-based fallback, confidence threshold)
+│   │
 │   └── core/llm/
 │       ├── config_store.py ← JSON storage for LLM config (API keys masked)
-│       ├── llm_service.py  ← LLM abstraction (OpenAI, Azure, Ollama)
-│       └── prompt_templates.py ← All system prompts and context builders
+│       ├── llm_service.py  ← LLM abstraction (OpenAI, Azure, Ollama) + quality gate + unified agentic generation
+│       └── prompt_templates.py ← All system prompts (RAG, agentic reasoning, code review, log summary, cross-analysis, conversational)
 │
 ├── sample-project/         ← Test project with logs and source code
 │   ├── logs/app.log        ← Sample log with errors (timeout, NoneType, etc.)
@@ -112,7 +130,7 @@ bakup.ai/
 └── logs/                   ← Application runtime logs
 ```
 
-**Total:** ~34 Python files, ~4,400 lines backend / ~2,400 lines frontend
+**Total:** ~54 Python files, ~12,000 lines backend / ~2,400 lines frontend
 
 ---
 
@@ -126,6 +144,15 @@ bakup.ai/
 | Embedding Model | `all-MiniLM-L6-v2` | dim=384, cached in `model-weights/` |
 | ChromaDB Dir | `./vectordb` | `BAKUP_CHROMA_DIR` env var |
 | Confidence Threshold | 0.35 | `BAKUP_CONFIDENCE_THRESHOLD` env var |
+| LLM Context Window | 16384 | `BAKUP_LLM_CONTEXT_WINDOW` env var |
+| LLM Max Tokens | 2048 | `BAKUP_LLM_MAX_TOKENS` env var |
+| LLM Temperature | 0.1 | `BAKUP_LLM_TEMPERATURE` env var |
+| Router Confidence Threshold | 0.60 | Below this → falls back to project_query |
+| LLM Context Results | 10 | Max chunks sent to LLM per query |
+| Max Chunk Chars | 1200 | Per-chunk character limit in LLM context |
+| Evidence Logs Cap | 12 | Max log chunks in evidence context |
+| Evidence Code Cap | 12 | Max code chunks in evidence context |
+| Architecture Cap | 2500 chars | Architecture summary truncation limit |
 | Test Namespace | `d2a64b8f709574d8f1899038` | Derived from sample-project path |
 
 ---
@@ -182,41 +209,86 @@ python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1
 
 | Hash | Message | Date |
 |------|---------|------|
-| `5693209` | feat: log intelligence upgrade — multi-factor confidence, trend detection, clustering | Latest committed |
+| `a83360f` | feat: causal confidence scoring v4 — cluster ranking + structured reasoning | Latest committed |
+| `0831f23` | feat: agentic retrieval v3 — planner + agent executor + session memory | |
+| `a9353f0` | feat: agentic retrieval v2 — code review mode + evidence routing | |
+| `5693209` | feat: log intelligence upgrade — multi-factor confidence, trend detection, clustering | |
 | `3197629` | feat: add query classifier with conversational/meta routing | |
 | `4d43282` | feat: bakup.ai — full platform with hybrid retrieval, debug diagnostics & SSE streaming | |
 | `0757dd7` | Initial commit | |
 
-### Uncommitted Changes (as of 2026-03-04)
+### Uncommitted Changes (as of 2026-03-07)
 
-These changes span **three feature sets** that haven't been committed yet:
+These changes span **multiple feature sets** that haven't been committed yet:
 
-#### A. Enter-to-Send UI Fix
-- `ui/app.js` — Changed keydown from Ctrl+Enter to plain Enter (Shift+Enter for newline)
-- `ui/index.html` — Updated button tooltip
+#### A. Previously Uncommitted (Enter-to-Send, Path Handling, Multi-File Log Intelligence)
+See prior CONTEXT.md versions for details — these remain uncommitted.
 
-#### B. Path Handling Fix
-- `backend/api/routes/index.py` — Added `_normalize_path()`, `_validate_path()`, Docker volume enforcement
-- `ui/app.js` — Fixed folder picker separator detection with `lastIndexOf`
-- `docker-compose.yml` — Added `./projects` and `./logs` volume mounts, `BAKUP_DOCKER_VOLUMES` env var
+#### B. Query Classifier & Routing Fix
+- `backend/core/classifier/query_classifier.py` — Default classification changed from CONVERSATIONAL to PROJECT; code review patterns added to `_PROJECT_STRONG`
+- `backend/api/routes/query.py` — Only short-circuits GREETING (not conversational/off_topic when namespace exists); namespace-aware routing; pre_classified param; low-confidence → LLM routing
 
-#### C. Multi-File Log Intelligence Upgrade (Major)
-Files modified:
-- `backend/core/ingestion/chunker.py` — Added `file_name`, `last_modified`, `detected_timestamp`, `severity` to Chunk dataclass
-- `backend/core/ingestion/log_parser.py` — Added `_detect_severity()`, `_extract_first_timestamp()`, `_get_file_mtime_iso()`, severity tagging per chunk, metadata enrichment in `_make_chunk()` and `_fallback_chunk()`
-- `backend/core/ingestion/file_walker.py` — Added `.out` to `LOG_EXTENSIONS` and `TEXT_EXTENSIONS`
-- `backend/core/retrieval/models.py` — Added `file_name`, `severity`, `detected_timestamp` to RetrievedChunk
-- `backend/core/retrieval/vector_store.py` — Stores all new metadata; added `severity_search()` method
-- `backend/core/retrieval/ranker.py` — Added `file_name`, `severity`, `detected_timestamp` to RankedResult; propagates through `rank_results()`
-- `backend/core/retrieval/rag.py` — Wired severity search + file aggregation into both high/low confidence log paths; added enhanced debug logging
-- `backend/core/analysis/confidence.py` — Added 6th factor: cross-file consistency (errors across multiple files boost confidence)
-- `backend/core/analysis/__init__.py` — Re-exports `aggregate_by_file`, `FileAggregationReport`
-- `backend/core/llm/prompt_templates.py` — Added "Error Distribution" section to SYSTEM_LOG_SUMMARY; `build_log_analysis_context()` accepts `file_aggregation_summary`
-- `backend/core/llm/llm_service.py` — `generate_log_summary()` accepts `file_aggregation_summary` parameter
-- `backend/api/routes/query.py` — Wired severity search + file aggregation into SSE streaming paths
+#### C. GitHub 0-Chunk Bug Fix
+- `backend/api/routes/index.py` — Returns 422 when indexing produces 0 chunks
+- `ui/app.js` — Shows user-friendly error on 0-chunk index result
 
-New file:
-- `backend/core/analysis/file_aggregation.py` — Cross-file error distribution (error counts per file, ranking, dominant source, summary text)
+#### D. Reasoning Engine Upgrade (v5 — Major)
+Five critical pipeline fixes that transform the system from a search tool into a reasoning engine:
+
+#### E. Hybrid Query Router (v6)
+New pipeline entry point that replaces direct classifier routing:
+
+1. **Router Module** — `core/router/router.py`
+   - `route_query(query, namespace, session_context)` → `RoutingDecision(intent, confidence, source)`
+   - LLM-based classification via small JSON prompt when provider is configured
+   - Rule-based fallback using keyword banks + regex patterns (< 1 ms, no network)
+   - Fallback protection: confidence < 0.6 → forced to `project_query`
+   - Three intents: `project_query`, `conversational`, `unrelated`
+
+2. **Ingestion Filtering** — `core/ingestion/file_walker.py`
+   - Added `model-weights/`, `vectordb/` to `SKIP_DIRS`
+   - New `SKIP_EXTENSIONS` set: `.bin`, `.model`, `.vocab`, `.onnx`, `.pt`, `.pth`, `.safetensors`, `.gguf`, `.ggml`, `.pkl`, `.exe`, `.dll`, `.so`, images, audio, fonts, archives
+   - Both `walk_project()` and `list_indexed_files()` now check `SKIP_EXTENSIONS`
+
+3. **Route Integration** — `api/routes/query.py`
+   - Both `/ask` and `/ask/stream` now use `route_query()` as the first pipeline step
+   - Conversational/unrelated always short-circuited regardless of namespace
+   - Sub-classification via legacy classifier preserves greeting vs conversational distinction
+
+4. **Retrieval Guard** — `core/llm/llm_service.py`
+   - `_extractive_fallback()` now filters out chunks below confidence threshold
+   - Returns clarification prompt instead of irrelevant matches
+
+5. **Debug Endpoint** — `api/routes/debug.py`
+   - `POST /debug/router` — shows intent, confidence, source (llm/rules), latency, routing decision
+
+6. **Ignored Files for Ingestion**
+   - Directories: `model-weights/`, `vectordb/`, `node_modules/`, `dist/`, `build/`, `.venv/`
+   - Extensions: `.bin`, `.model`, `.vocab`, `.onnx`, `.pt`, `.pth`, `.safetensors`, `.gguf`, `.ggml`, `.pkl`, `.exe`, `.dll`, `.so`, `.dylib`, `.zip`, `.tar`, `.gz`, images, audio, fonts
+
+1. **Token Budget Increase** — `config.py`, `llm_service.py`
+   - `llm_context_window`: 4096 → 16384
+   - `llm_max_tokens`: 512 → 2048
+   - All 3 LLM providers (OpenAI, Azure, Ollama) updated
+
+2. **Unified Evidence Routing** — `rag.py`, `llm_service.py`
+   - ALL question types now route through `generate_agentic_answer()` with the full evidence context
+   - Previously, only ROOT_CAUSE got the full context; LOG_ANALYSIS, CROSS_ANALYSIS, CODE_REVIEW, and GENERAL discarded deps, architecture, and cross-analysis
+   - `generate_agentic_answer()` now supports 5 modes, each with an appropriate system prompt
+
+3. **Extractive Fallback Depth** — `llm_service.py`
+   - `_extractive_fallback()` shows top 5 chunks (was 1) with 1000 chars each (was 600)
+   - Structured headers with confidence scores and code blocks
+
+4. **Response Quality Gate** — `llm_service.py`
+   - New `_quality_gate()` method detects truncated or too-short responses
+   - Auto-retries with 2x token budget when LLM output is cut off
+   - Checks for truncation signals and missing terminal punctuation
+
+5. **Context Limits Increase** — `rag.py`, `llm_service.py`, `agent.py`
+   - `_LLM_CONTEXT_RESULTS`: 5 → 10 chunks
+   - `_MAX_CHUNK_CHARS`: 800 → 1200 per chunk
+   - `build_evidence_context()`: logs/code cap 8 → 12, architecture cap 1500 → 2500 chars
 
 ---
 
@@ -241,30 +313,43 @@ POST /index { path, log_path?, namespace? }
 ### Data Flow: Query
 ```
 POST /ask { question, namespace, top_k?, debug? }
-  → classify_query() → PROJECT | GREETING | CONVERSATIONAL | OFF_TOPIC
-  → If GREETING → polite one-liner (no RAG)
-  → If CONVERSATIONAL → LLM direct call (no retrieval)
-  → If OFF_TOPIC → scope guard response
-  → If PROJECT:
-      → embed_query() → 384-dim vector
-      → query_chunks() → top_k semantic matches
-      → If log query:
-          → keyword_search() — $contains for ERROR, Exception, Traceback, etc.
-          → severity_search() — metadata filter for severity="error"
-      → Merge + deduplicate
-      → rank_results() → distance-to-confidence conversion, sort desc
-      → If has_relevant_results (top confidence ≥ 0.35):
-          → For log queries:
-              → analyze_error_trends() → hourly counts, spikes, repeating failures
-              → cluster_log_events() → temporal + keyword clustering
-              → calculate_confidence() → 6-factor composite score
-              → aggregate_by_file() → error distribution across files
-              → generate_log_summary() → LLM structured report (or extractive fallback)
-          → For code queries:
-              → generate_response() → LLM answer with citations (or extractive)
-      → If low confidence + log query → still run analysis pipeline, summarize
-      → If low confidence + code query → ask clarifying question
-      → If no results → "No similar incident found."
+  → route_query() via hybrid router:
+      1. Try LLM classification (if provider configured)
+      2. If LLM confidence ≥ 0.6 → use LLM intent
+      3. Otherwise → rule-based classification
+      4. If rule confidence < 0.6 and intent ≠ project_query → force project_query
+  → If conversational → LLM direct call or canned response (no retrieval)
+  → If unrelated → scope guard response
+  → If project_query:
+      → Agentic planner classifies question type:
+          LOG_ANALYSIS | CODE_ANALYSIS | CODE_REVIEW | ROOT_CAUSE | ARCHITECTURE | STRUCTURAL | GENERAL
+      → Generates multi-step retrieval plan (2–5 steps per question type)
+      → Agent executor runs each step:
+          1. Semantic search → top chunks
+          2. Keyword search → error/exception/traceback matches
+          3. Code reference extraction → file:line from stack traces
+          4. Dependency resolution → import/call graph traversal
+          5. Cross-analysis → log-to-code linking
+      → Structured evidence built:
+          - Log chunks (up to 12, 1200 chars each)
+          - Code chunks (up to 12, 1200 chars each)
+          - Dependencies list
+          - Architecture summary (up to 2500 chars)
+          - Cross-analysis context
+          - Error clusters, trends, confidence scoring
+      → build_evidence_context() → coherent context block for LLM
+      → ALL question types route through generate_agentic_answer():
+          - ROOT_CAUSE → SYSTEM_AGENTIC_REASONING prompt
+          - CROSS_ANALYSIS → SYSTEM_CROSS_ANALYSIS prompt
+          - LOG_ANALYSIS → SYSTEM_LOG_SUMMARY prompt
+          - CODE_REVIEW → SYSTEM_CODE_REVIEW prompt
+          - GENERAL → SYSTEM_RAG prompt
+      → Quality gate checks response:
+          - Min length (120 chars)
+          - Truncation detection (missing terminal punctuation, truncation signals)
+          - Auto-retry with 2x token budget if quality check fails
+      → Structured answer returned with confidence scores and source citations
+      → Turn stored in session memory for follow-up support
 ```
 
 ### Confidence Scoring (6 Factors)
@@ -307,7 +392,7 @@ Configured via UI settings panel or `PUT /llm/config`:
 | POST | `/llm/test` | Test LLM connectivity |
 | GET | `/debug/stats/{namespace}` | Collection stats |
 | GET | `/debug/sample/{namespace}` | Sample chunks |
-| POST | `/debug/search` | Raw similarity search |
+| POST | `/debug/router` | Hybrid router diagnostics |
 
 ---
 
@@ -333,12 +418,14 @@ chardet==5.2.0
 
 ## 10. Known State & Notes
 
-- **Ollama** must be running locally for LLM-augmented answers. If not available, the system falls back to **extractive mode** (returns raw chunk excerpts — no hallucination possible).
+- **Ollama** must be running locally for LLM-augmented answers. If not available, the system falls back to **extractive mode** (returns structured top-5 chunk excerpts with formatting — no hallucination possible).
 - The `model-weights/` directory caches the embedding model on first run (~80MB download).
 - The `vectordb/` directory persists ChromaDB data between restarts.
 - After code changes, **re-index** the project to populate new metadata fields (severity, file_name, etc.) in existing ChromaDB data.
 - The UI communicates with the backend via `http://localhost:8000` (hardcoded in `ui/app.js`).
-- All uncommitted changes listed in Section 6 are **tested and working** as of 2026-03-04.
+- All uncommitted changes listed in Section 6 are **tested and working** as of 2026-03-07.
+- **Reasoning Engine v5**: All question types now receive the full evidence context (logs + code + deps + architecture + cross-analysis). No evidence is discarded at the last mile. The response quality gate ensures LLM output is complete. Token budget of 2048 allows deep multi-section analysis.
+- **Hybrid Router v6**: Query routing uses LLM classification when available, with rule-based fallback. Conversational/unrelated queries are always short-circuited. Ingestion now excludes model-weights, vectordb, and binary files. Retrieval guard prevents low-confidence extractive matches from being surfaced.
 
 ---
 
@@ -389,14 +476,16 @@ print(f'Mode: {r[\"mode\"]}, Confidence: {r[\"confidence\"]}, Sources: {len(r[\"
 ## 12. What to Work On Next (suggestions)
 
 Potential next steps, not yet started:
-1. **Commit all uncommitted changes** — three feature sets ready to push
+1. **Commit all uncommitted changes** — four feature sets ready to push (Enter-to-Send, Path Handling, Log Intelligence, Reasoning Engine v5)
 2. **README.md** — currently a stub, needs proper documentation
-3. **Folder dedup tracking** — prevent re-indexing the same folder (hash-based)
-4. **Multi-log-folder support** — allow indexing dedicated log directories separately
-5. **UI improvements** — file tree view, severity badges, error distribution charts
-6. **Auth improvements** — token-based auth instead of simple access key
-7. **Rate limiting** — protect endpoints from abuse
-8. **Automated tests** — pytest suite with fixtures
+3. **SSE streaming for agentic mode** — currently agentic answers wait for full LLM response; stream tokens as they arrive
+4. **Folder dedup tracking** — prevent re-indexing the same folder (hash-based)
+5. **Multi-log-folder support** — allow indexing dedicated log directories separately
+6. **UI improvements** — file tree view, severity badges, error distribution charts, evidence chain visualization
+7. **Prompt tuning per question type** — tailor system prompts further for LOG_ANALYSIS, CODE_REVIEW, GENERAL modes
+8. **Auth improvements** — token-based auth instead of simple access key
+9. **Rate limiting** — protect endpoints from abuse
+10. **Automated tests** — pytest suite with fixtures covering the full pipeline
 
 ---
 

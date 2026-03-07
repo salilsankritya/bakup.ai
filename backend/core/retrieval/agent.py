@@ -611,7 +611,7 @@ def execute_plan(
 
 def build_evidence_context(
     evidence: StructuredEvidence,
-    max_chars: int = 800,
+    max_chars: int = 1200,
 ) -> str:
     """
     Render structured evidence into a context block for the LLM prompt.
@@ -624,7 +624,7 @@ def build_evidence_context(
     # Log evidence
     if evidence.logs:
         log_parts = []
-        for i, chunk in enumerate(evidence.logs[:8], 1):
+        for i, chunk in enumerate(evidence.logs[:12], 1):
             text = chunk.text[:max_chars]
             if len(chunk.text) > max_chars:
                 text += "\n[...truncated]"
@@ -637,7 +637,7 @@ def build_evidence_context(
     # Code evidence
     if evidence.code:
         code_parts = []
-        for i, chunk in enumerate(evidence.code[:8], 1):
+        for i, chunk in enumerate(evidence.code[:12], 1):
             text = chunk.text[:max_chars]
             if len(chunk.text) > max_chars:
                 text += "\n[...truncated]"
@@ -658,8 +658,8 @@ def build_evidence_context(
     # Architecture summary
     if evidence.architecture_summary:
         # Truncate to fit context window
-        arch = evidence.architecture_summary[:1500]
-        if len(evidence.architecture_summary) > 1500:
+        arch = evidence.architecture_summary[:2500]
+        if len(evidence.architecture_summary) > 2500:
             arch += "\n[...truncated]"
         sections.append(f"## Architecture Context\n\n{arch}")
 

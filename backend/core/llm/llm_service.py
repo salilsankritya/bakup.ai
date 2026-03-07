@@ -75,7 +75,7 @@ class LLMResponse:
 # ── System prompt & constants ──────────────────────────────────────────────────
 # Prompts are defined in prompt_templates.py — imported above.
 
-_MAX_CHUNK_CHARS = 800   # Chars per chunk sent to LLM — guards against ctx overflow
+_MAX_CHUNK_CHARS = 1200   # Chars per chunk sent to LLM — guards against ctx overflow
 
 
 # ── Main service class ─────────────────────────────────────────────────────────
@@ -298,6 +298,65 @@ class LLMService:
             sources=self._serialise_sources(log_chunks[:5]),
         )
 
+    def generate_code_review(
+        self,
+        chunks: list,
+        question: str,
+        top_n: int = 8,
+    ) -> LLMResponse:
+        """
+        Generate a code quality review for broad analytical questions.
+
+        Uses a specialised code-review prompt that instructs the LLM to
+        analyse code for quality, patterns, and improvements rather than
+        looking for a specific answer.
+        """
+        from core.llm.prompt_templates import SYSTEM_CODE_REVIEW
+
+        if not chunks:
+            return self._no_data_response()
+
+        cfg = load_config()
+        if not cfg.configured:
+            print(f"  [bakup:debug] LLM not configured — extractive fallback for code review")
+            return LLMResponse(
+                answer=self._extractive_fallback(chunks),
+                mode="extractive",
+                provider="none",
+                model="none",
+                sources=self._serialise_sources(chunks[:top_n]),
+            )
+
+        context = build_context_block(chunks[:top_n], max_chars=_MAX_CHUNK_CHARS)
+        user_msg = build_rag_user_message(question, context)
+
+        print(f"  [bakup:debug] LLM call: generate_code_review ({cfg.provider}/{cfg.model})")
+        print(f"  [bakup:debug]   context: {len(context)} chars, {len(chunks[:top_n])} chunks")
+
+        try:
+            raw = self._call_provider(cfg, user_msg, system_prompt=SYSTEM_CODE_REVIEW)
+        except Exception as exc:
+            safe_msg = _redact_key(str(exc), cfg.api_key)
+            print(f"  [bakup:debug] LLM code review call FAILED: {safe_msg}")
+            return LLMResponse(
+                answer=self._extractive_fallback(chunks),
+                mode="extractive",
+                provider=cfg.provider,
+                model=cfg.model,
+                error=f"LLM call failed ({safe_msg}) — showing extractive result.",
+                sources=self._serialise_sources(chunks[:top_n]),
+            )
+
+        print(f"  [bakup:debug] LLM code review response ({len(raw)} chars)")
+
+        return LLMResponse(
+            answer=raw.strip(),
+            mode="llm",
+            provider=cfg.provider,
+            model=cfg.model,
+            sources=self._serialise_sources(chunks[:top_n]),
+        )
+
     def generate_conversational(self, question: str) -> LLMResponse:
         """
         Handle conversational/meta/personal questions by calling the LLM
@@ -353,13 +412,35 @@ class LLMService:
         """
         Generate an agentic reasoning answer from structured evidence.
 
-        Supports:
-          - "root_cause" → uses SYSTEM_AGENTIC_REASONING prompt for
-            multi-step root-cause analysis correlating logs, code, and deps.
+        All question types route through this method so the full evidence
+        context (logs, code, deps, architecture, cross-analysis) is always
+        available to the LLM.  The *mode* selects the system prompt:
+
+          - "root_cause"     → SYSTEM_AGENTIC_REASONING
+          - "log_analysis"   → SYSTEM_LOG_SUMMARY
+          - "cross_analysis" → SYSTEM_CROSS_ANALYSIS
+          - "code_review"    → SYSTEM_CODE_REVIEW
+          - "general"        → SYSTEM_RAG
 
         Falls back to extractive display when LLM is not configured.
         """
-        from core.llm.prompt_templates import SYSTEM_AGENTIC_REASONING
+        from core.llm.prompt_templates import (
+            SYSTEM_AGENTIC_REASONING,
+            SYSTEM_LOG_SUMMARY,
+            SYSTEM_CROSS_ANALYSIS,
+            SYSTEM_CODE_REVIEW,
+            SYSTEM_RAG,
+        )
+
+        _MODE_PROMPTS = {
+            "root_cause":     SYSTEM_AGENTIC_REASONING,
+            "log_analysis":   SYSTEM_LOG_SUMMARY,
+            "cross_analysis": SYSTEM_CROSS_ANALYSIS,
+            "code_review":    SYSTEM_CODE_REVIEW,
+            "general":        SYSTEM_RAG,
+        }
+
+        system_prompt = _MODE_PROMPTS.get(mode, SYSTEM_RAG)
 
         print(f"  [bakup:debug] generate_agentic_answer: mode={mode}, context_len={len(context_block)}")
 
@@ -368,7 +449,7 @@ class LLMService:
             print("  [bakup:debug] LLM not configured — returning context as extractive")
             answer = (
                 "**Agentic Analysis (extractive — configure LLM for full reasoning):**\n\n"
-                + context_block[:3000]
+                + context_block[:5000]
             )
             return LLMResponse(
                 answer=answer,
@@ -382,13 +463,14 @@ class LLMService:
         print(f"  [bakup:debug] LLM call: agentic_{mode} ({cfg.provider}/{cfg.model})")
 
         try:
-            raw = self._call_provider(cfg, user_msg, system_prompt=SYSTEM_AGENTIC_REASONING)
+            raw = self._call_provider(cfg, user_msg, system_prompt=system_prompt)
+            raw = self._quality_gate(raw, cfg, user_msg, system_prompt)
         except Exception as exc:
             safe_msg = _redact_key(str(exc), cfg.api_key)
             print(f"  [bakup:debug] LLM agentic call failed: {safe_msg}")
             answer = (
                 "**Agentic Analysis (LLM call failed — showing raw evidence):**\n\n"
-                + context_block[:3000]
+                + context_block[:5000]
             )
             return LLMResponse(
                 answer=answer,
@@ -402,7 +484,7 @@ class LLMService:
 
         if raw.strip().startswith(NO_ANSWER_TOKEN):
             return LLMResponse(
-                answer="No relevant evidence found for root-cause analysis.",
+                answer="No relevant evidence found in the indexed data for this question.",
                 mode="llm",
                 provider=cfg.provider,
                 model=cfg.model,
@@ -481,6 +563,70 @@ class LLMService:
 
     # ── Provider dispatch ─────────────────────────────────────────────────────
 
+    _TRUNCATION_SIGNALS = [
+        "...",
+        "[truncated",
+        "I'll continue",
+        "Let me continue",
+        "Due to length",
+        "I would need more space",
+    ]
+
+    _MIN_QUALITY_LEN = 120   # answers shorter than this get a retry
+
+    def _response_looks_truncated(self, text: str) -> bool:
+        """Detect if the LLM response was cut off mid-thought."""
+        stripped = text.rstrip()
+        # Ends mid-sentence (no terminal punctuation)
+        if stripped and stripped[-1] not in ".!?:>\n`|" and len(stripped) > 60:
+            return True
+        # Contains truncation signals near the end
+        tail = stripped[-120:] if len(stripped) > 120 else stripped
+        for sig in self._TRUNCATION_SIGNALS:
+            if sig.lower() in tail.lower():
+                return True
+        return False
+
+    def _quality_gate(
+        self,
+        raw: str,
+        cfg,
+        user_msg: str,
+        system_prompt: str,
+    ) -> str:
+        """
+        Check response quality and retry once with a larger token budget
+        if the response appears truncated or too short.
+        """
+        if not raw or raw.strip().startswith(NO_ANSWER_TOKEN):
+            return raw   # nothing to improve
+
+        is_short     = len(raw.strip()) < self._MIN_QUALITY_LEN
+        is_truncated = self._response_looks_truncated(raw)
+
+        if not is_short and not is_truncated:
+            return raw   # looks good
+
+        reason = "too short" if is_short else "appears truncated"
+        print(f"  [bakup:debug] quality gate: response {reason} ({len(raw)} chars) — retrying with higher budget")
+
+        # Retry with 2x token budget via env override
+        orig_budget = os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")
+        retry_budget = str(int(orig_budget) * 2)
+        os.environ["BAKUP_LLM_MAX_TOKENS"] = retry_budget
+        try:
+            retry_raw = self._call_provider(cfg, user_msg, system_prompt=system_prompt)
+        except Exception:
+            retry_raw = None
+        finally:
+            os.environ["BAKUP_LLM_MAX_TOKENS"] = orig_budget
+
+        if retry_raw and len(retry_raw.strip()) > len(raw.strip()):
+            print(f"  [bakup:debug] quality gate: retry produced better response ({len(retry_raw)} chars)")
+            return retry_raw
+
+        return raw   # keep original if retry didn't help
+
     def _call_provider(
         self,
         cfg: LLMConfig,
@@ -523,7 +669,7 @@ class LLMService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_message},
             ],
-            max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "512")),
+            max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
             temperature=float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
         )
         return completion.choices[0].message.content or ""
@@ -561,7 +707,7 @@ class LLMService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": user_message},
             ],
-            max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "512")),
+            max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
             temperature=float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
         )
         return completion.choices[0].message.content or ""
@@ -598,7 +744,7 @@ class LLMService:
             "stream": False,
             "options": {
                 "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-                "num_predict": int(os.environ.get("BAKUP_LLM_MAX_TOKENS",   "512")),
+                "num_predict": int(os.environ.get("BAKUP_LLM_MAX_TOKENS",   "2048")),
             },
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -630,17 +776,44 @@ class LLMService:
     # ── Extractive fallback ───────────────────────────────────────────────────
 
     def _extractive_fallback(self, chunks: list) -> str:
+        """
+        When LLM is not configured or call fails, show top chunks with
+        structured formatting so users still get useful context.
+
+        Retrieval guard: chunks below the confidence threshold are excluded
+        to avoid surfacing irrelevant matches (e.g. model weight files).
+        """
         if not chunks:
             return "No similar incident found in indexed data."
-        top = chunks[0]
-        excerpt = top.text[:600].strip()
+
+        # Retrieval guard — filter out very low confidence matches
+        _MIN_EXTRACTIVE_CONF = float(os.environ.get("BAKUP_CONFIDENCE_THRESHOLD", "0.35"))
+        usable = [c for c in chunks[:5] if c.confidence >= _MIN_EXTRACTIVE_CONF]
+
+        if not usable:
+            return (
+                "I found some indexed content, but none of the matches are confident "
+                "enough to be relevant to your question.\n\n"
+                "Could you try rephrasing? For example:\n"
+                "• Mention a specific file, function, or error message\n"
+                "• Include a log entry or status code\n"
+                "• Narrow down the component or time range"
+            )
+
+        parts = []
+        for i, c in enumerate(usable, 1):
+            excerpt = c.text[:1000].strip()
+            header = (
+                f"**[{i}] {c.source_file} "
+                f"(lines {c.line_start}–{c.line_end}, "
+                f"confidence: {c.confidence:.0%}):**"
+            )
+            parts.append(f"{header}\n```\n{excerpt}\n```")
+
         answer = (
-            f"Most relevant match: {top.source_file} "
-            f"lines {top.line_start}–{top.line_end} "
-            f"(confidence: {top.confidence:.2f}):\n\n{excerpt}"
+            "**Relevant matches found** (configure an LLM for full reasoning analysis):\n\n"
+            + "\n\n".join(parts)
         )
-        if len(top.text) > 600:
-            answer += "\n\n[truncated — see source for full context]"
         return answer
 
     def _no_data_response(self, cfg: Optional[LLMConfig] = None) -> LLMResponse:

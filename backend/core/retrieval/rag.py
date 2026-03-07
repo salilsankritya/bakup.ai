@@ -106,10 +106,10 @@ from core.retrieval.session import (
 _NO_ANSWER_SIGNAL = "NO_ANSWER"
 
 # How many top results to include in the LLM context window
-_LLM_CONTEXT_RESULTS = 5
+_LLM_CONTEXT_RESULTS = 10
 
 # Max chars per chunk included in LLM context (avoids overflowing context window)
-_MAX_CHUNK_CHARS_IN_CONTEXT = 800
+_MAX_CHUNK_CHARS_IN_CONTEXT = 1200
 
 
 # ── Log-query keyword detection ───────────────────────────────────────────────
@@ -229,6 +229,8 @@ def answer_question(
     namespace: str,
     top_k: int = 8,
     debug: bool = False,
+    *,
+    pre_classified: Optional[str] = None,
 ) -> RAGResponse:
     """
     Answer a plain-English question about an indexed project.
@@ -243,10 +245,13 @@ def answer_question(
         7. Store turn in session memory for follow-up support.
 
     Args:
-        question:  The user's question.
-        namespace: Project namespace used when indexing.
-        top_k:     Number of candidates to retrieve from ChromaDB.
-        debug:     When True, attach step-by-step trace to the response.
+        question:       The user's question.
+        namespace:      Project namespace used when indexing.
+        top_k:          Number of candidates to retrieve from ChromaDB.
+        debug:          When True, attach step-by-step trace to the response.
+        pre_classified: Optional pre-computed category string
+                        ("project" | "greeting" | "off_topic" | "conversational").
+                        When provided, skips the internal classifier call.
 
     Returns:
         RAGResponse with answer, sources, confidence, no_data flag, and
@@ -280,8 +285,12 @@ def answer_question(
 
     # ── Step 1: Classify (greeting / off-topic / conversational) ─────────────
     _step("classify", "Classifying question...")
-    category = classify_query(question)
-    _step("classify_done", f"Category: {category.value}")
+    if pre_classified is not None:
+        category = QueryCategory(pre_classified)
+        _step("classify_done", f"Category: {category.value} (pre-classified by route)")
+    else:
+        category = classify_query(question)
+        _step("classify_done", f"Category: {category.value}")
 
     if category == QueryCategory.GREETING:
         _step("response", "Greeting detected — returning polite response")
@@ -443,7 +452,13 @@ def answer_question(
     top_confidence = max(c.confidence for c in all_chunks) if all_chunks else 0.0
 
     if not has_relevant_results(all_chunks):
-        # Low confidence — try LLM analysis for logs, clarification for others
+        # Low embedding confidence — but we still have SOME chunks.
+        # When an LLM is configured, let it analyse the evidence and decide
+        # whether it can produce a useful answer (it's much better at judging
+        # relevance for broad/analytical questions than a static threshold).
+        from core.llm.config_store import load_config as _load_llm_cfg
+        llm_configured = _load_llm_cfg().configured
+
         if evidence.has_logs:
             _step("low_conf_log", "Low embedding confidence but log entries found — generating analysis")
             return _generate_agentic_answer(
@@ -451,7 +466,17 @@ def answer_question(
                 namespace, _step, _result, steps, debug, t0,
             )
 
-        _step("clarify", "Low confidence — asking LLM for clarification...")
+        if llm_configured:
+            # LLM available — route through full answer generation.
+            # The LLM will return NO_ANSWER if it truly can't help.
+            _step("low_conf_llm", f"Low confidence ({top_confidence:.0%}) but LLM is available — generating answer")
+            return _generate_agentic_answer(
+                question, evidence, session_context, plan,
+                namespace, _step, _result, steps, debug, t0,
+            )
+
+        # No LLM configured — fall back to clarification
+        _step("clarify", "Low confidence — asking for clarification (no LLM configured)...")
         from core.llm.llm_service import get_llm_service
         svc = get_llm_service()
         llm_resp = svc.generate_clarification(
@@ -509,8 +534,11 @@ def _generate_agentic_answer(
     svc = get_llm_service()
 
     # Choose the right generation mode based on evidence type
+    # ALL modes now route through generate_agentic_answer so the full
+    # evidence context (logs, code, deps, arch, cross-analysis) is never
+    # discarded.  Only the system prompt changes per mode.
+
     if plan.question_type == QuestionType.ROOT_CAUSE:
-        # Root-cause mode — use cross-analysis prompt with full evidence
         _step("mode", "Root-cause reasoning mode — correlating logs + code + deps")
         llm_resp = svc.generate_agentic_answer(
             question=question,
@@ -519,37 +547,36 @@ def _generate_agentic_answer(
         )
 
     elif evidence.has_cross_analysis:
-        # Log-to-code links found — use cross-analysis prompt
         _step("mode", "Cross-analysis mode — log errors linked to source code")
-        relevant_chunks = (evidence.logs + evidence.code)[:_LLM_CONTEXT_RESULTS]
-        llm_resp = svc.generate_log_summary(
-            question,
-            relevant_chunks,
-            trend_summary=evidence.trend_summary,
-            cluster_summary=evidence.cluster_summary,
-            confidence_summary=evidence.confidence_summary,
-            file_aggregation_summary=evidence.file_aggregation_summary,
-            cross_analysis_context=evidence.cross_analysis_context,
+        llm_resp = svc.generate_agentic_answer(
+            question=question,
+            context_block=context_block,
+            mode="cross_analysis",
         )
 
     elif evidence.has_logs and plan.question_type == QuestionType.LOG_ANALYSIS:
-        # Pure log analysis
         _step("mode", "Log analysis mode — structured incident report")
-        relevant_chunks = evidence.logs[:_LLM_CONTEXT_RESULTS]
-        llm_resp = svc.generate_log_summary(
-            question,
-            relevant_chunks,
-            trend_summary=evidence.trend_summary,
-            cluster_summary=evidence.cluster_summary,
-            confidence_summary=evidence.confidence_summary,
-            file_aggregation_summary=evidence.file_aggregation_summary,
+        llm_resp = svc.generate_agentic_answer(
+            question=question,
+            context_block=context_block,
+            mode="log_analysis",
+        )
+
+    elif plan.question_type == QuestionType.CODE_REVIEW:
+        _step("mode", "Code review / quality analysis mode")
+        llm_resp = svc.generate_agentic_answer(
+            question=question,
+            context_block=context_block,
+            mode="code_review",
         )
 
     else:
-        # Code analysis or general — use standard RAG with bundled context
-        _step("mode", "Code/general analysis mode")
-        relevant_chunks = (evidence.code + evidence.logs)[:_LLM_CONTEXT_RESULTS]
-        llm_resp = svc.generate_response(relevant_chunks, question)
+        _step("mode", "General analysis mode — full evidence reasoning")
+        llm_resp = svc.generate_agentic_answer(
+            question=question,
+            context_block=context_block,
+            mode="general",
+        )
 
     _step("generate_done", f"Answer generated (mode={llm_resp.mode})")
 

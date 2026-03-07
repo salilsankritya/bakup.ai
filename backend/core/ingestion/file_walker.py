@@ -39,6 +39,20 @@ SKIP_DIRS: frozenset = frozenset({
     "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
     "dist", "build", ".next", ".nuxt", "target",
     ".idea", ".vscode",
+    "model-weights",       # embedding model binaries — never index
+    "vectordb",            # ChromaDB persistence — never index
+})
+
+# File extensions to always skip (binary / model weights)
+SKIP_EXTENSIONS: frozenset = frozenset({
+    ".bin", ".model", ".vocab", ".onnx", ".pt", ".pth",
+    ".safetensors", ".gguf", ".ggml",
+    ".pkl", ".pickle", ".npy", ".npz",
+    ".exe", ".dll", ".so", ".dylib",
+    ".zip", ".tar", ".gz", ".bz2", ".7z",
+    ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp",
+    ".mp3", ".mp4", ".wav", ".avi",
+    ".woff", ".woff2", ".ttf", ".eot",
 })
 
 # File extensions considered text/code
@@ -108,6 +122,10 @@ def walk_project(project_root: Path, namespace: str = "") -> Iterator[Chunk]:
 
             # Safety: must stay inside root
             if not _is_safe_path(filepath, root):
+                continue
+
+            # Skip binary / model weight extensions
+            if filepath.suffix.lower() in SKIP_EXTENSIONS:
                 continue
 
             # Extension filter
@@ -186,6 +204,8 @@ def list_indexed_files(project_root: Path) -> List[str]:
         for filename in filenames:
             filepath = current / filename
             if not _is_safe_path(filepath, root):
+                continue
+            if filepath.suffix.lower() in SKIP_EXTENSIONS:
                 continue
             if filepath.suffix.lower() not in TEXT_EXTENSIONS:
                 continue

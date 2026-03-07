@@ -881,7 +881,7 @@ indexUploadForm.addEventListener('submit', async e => {
 
 function onIndexSuccess(data) {
   const s = getActive();
-  if (s) {
+  if (data.chunks_stored > 0 && s) {
     s.namespace = data.namespace;
     saveState();
     updateHeader();
@@ -889,9 +889,15 @@ function onIndexSuccess(data) {
     sendBtn.disabled = !chatInput.value.trim();
   }
 
-  indexResultInner.className   = 'index-result__inner ok';
-  indexResultInner.textContent =
-    `✓ Indexed\nNamespace : ${data.namespace}\nChunks    : ${data.chunks_stored}`;
+  if (data.chunks_stored === 0) {
+    indexResultInner.className   = 'index-result__inner err';
+    indexResultInner.textContent =
+      `✗ No chunks indexed\nThe repository may be empty, inaccessible, or contain no supported files.\nFor private repos, embed a token in the URL.`;
+  } else {
+    indexResultInner.className   = 'index-result__inner ok';
+    indexResultInner.textContent =
+      `✓ Indexed\nNamespace : ${data.namespace}\nChunks    : ${data.chunks_stored}`;
+  }
   indexResult.hidden = false;
 }
 

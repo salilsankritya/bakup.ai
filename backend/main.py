@@ -75,9 +75,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── CORS: localhost only ───────────────────────────────────────────────────────
-# Restricts cross-origin requests to the local UI only.
-# Do not add external origins here.
+# ── CORS ───────────────────────────────────────────────────────────────────────
+# Allows localhost origins for local dev and any production domains
+# configured via the BAKUP_CORS_ORIGINS env var (comma-separated).
+#
+# Example:  BAKUP_CORS_ORIGINS=https://bakup.example.com,https://beta.bakup.ai
+import os as _os_cors
+_extra_origins = [
+    o.strip()
+    for o in _os_cors.environ.get("BAKUP_CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -91,6 +99,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5500",
         "http://127.0.0.1:8080",
+        *_extra_origins,
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],

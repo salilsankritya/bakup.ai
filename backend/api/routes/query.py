@@ -124,22 +124,48 @@ async def ask(body: QueryRequest) -> QueryResponse:
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question must not be empty.")
 
-    # ── Classification shortcut ───────────────────────────────────────────────
-    from core.classifier.query_classifier import classify_query, QueryCategory
+    # ── Hybrid Router ─────────────────────────────────────────────────────────
+    # Uses LLM classification when available, falls back to rule-based.
+    from core.router.router import route_query, get_scope_message
 
-    category = classify_query(body.question)
-    if category in (QueryCategory.GREETING, QueryCategory.CONVERSATIONAL, QueryCategory.OFF_TOPIC):
+    routing = route_query(
+        query=body.question,
+        namespace=body.namespace or "",
+    )
+
+    # Conversational → short-circuit (no retrieval needed)
+    if routing.intent == "conversational":
+        from core.retrieval.rag import answer_question as _answer
+        # The old classifier's GREETING vs CONVERSATIONAL distinction is
+        # preserved inside rag.answer_question via pre_classified.
+        # Use the regex classifier to pick the right sub-category.
+        from core.classifier.query_classifier import classify_query, QueryCategory
+        sub = classify_query(body.question)
+        pre = sub.value if sub in (QueryCategory.GREETING, QueryCategory.CONVERSATIONAL) else "conversational"
+        result = _answer(
+            question=body.question,
+            namespace="_",
+            top_k=1,
+            debug=body.debug,
+            pre_classified=pre,
+        )
+        return _build_query_response(result)
+
+    # Unrelated → scope guard (no retrieval needed)
+    if routing.intent == "unrelated":
         from core.retrieval.rag import answer_question as _answer
         result = _answer(
             question=body.question,
-            namespace=body.namespace or "_",
+            namespace="_",
             top_k=1,
             debug=body.debug,
+            pre_classified="off_topic",
         )
         return _build_query_response(result)
 
     # ── Project questions require a valid namespace ───────────────────────────
-    if not body.namespace.strip():
+    has_namespace = bool(body.namespace and body.namespace.strip())
+    if not has_namespace:
         raise HTTPException(status_code=400, detail="Namespace must not be empty. Use the namespace returned by /index.")
 
     top_k = max(1, min(body.top_k, 20))
@@ -158,11 +184,14 @@ async def ask(body: QueryRequest) -> QueryResponse:
         )
 
     try:
+        # Force category to "project" so answer_question skips re-classification
+        # and goes straight to the RAG pipeline.
         result = answer_question(
             question=body.question,
             namespace=body.namespace,
             top_k=top_k,
             debug=body.debug,
+            pre_classified="project",
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Query failed: {exc}")
@@ -197,23 +226,31 @@ async def ask_stream(body: QueryRequest):
             return f"data: {payload}\n\n"
 
         try:
-            # ── Step 1: Classify ──────────────────────────────────────────────
-            yield sse_step("classify", "Classifying your question...")
+            # ── Step 1: Hybrid Router ─────────────────────────────────────────
+            yield sse_step("classify", "Routing your question...")
 
-            from core.classifier.query_classifier import classify_query, QueryCategory
-            category = await loop.run_in_executor(None, classify_query, body.question)
+            from core.router.router import route_query
+            routing = await loop.run_in_executor(
+                None, partial(route_query, body.question, body.namespace or "")
+            )
 
-            if category == QueryCategory.GREETING:
-                yield sse_step("classify_done", "Greeting detected")
-                from core.retrieval.rag import answer_question
-                result = await loop.run_in_executor(
-                    None, partial(answer_question, body.question, "_", 1, True)
-                )
-                yield sse_result(_response_to_dict(result))
-                return
+            # Conversational → short-circuit
+            if routing.intent == "conversational":
+                # Distinguish greeting vs conversational via regex sub-classifier
+                from core.classifier.query_classifier import classify_query, QueryCategory
+                sub = await loop.run_in_executor(None, classify_query, body.question)
 
-            if category == QueryCategory.CONVERSATIONAL:
-                yield sse_step("classify_done", "Conversational question — no retrieval needed")
+                if sub == QueryCategory.GREETING:
+                    yield sse_step("classify_done", "Greeting detected")
+                    from core.retrieval.rag import answer_question
+                    result = await loop.run_in_executor(
+                        None, partial(answer_question, body.question, "_", 1, True,
+                                      pre_classified="greeting")
+                    )
+                    yield sse_result(_response_to_dict(result))
+                    return
+
+                yield sse_step("classify_done", f"Conversational question — no retrieval needed (via {routing.source})")
                 yield sse_step("llm_direct", "Responding directly...")
                 from core.llm.llm_service import get_llm_service
                 svc = get_llm_service()
@@ -233,16 +270,19 @@ async def ask_stream(body: QueryRequest):
                 yield sse_result(_response_to_dict(result))
                 return
 
-            if category == QueryCategory.OFF_TOPIC:
-                yield sse_step("classify_done", "Outside project scope")
+            # Unrelated → scope guard
+            if routing.intent == "unrelated":
+                yield sse_step("classify_done", f"Outside project scope (via {routing.source})")
                 from core.retrieval.rag import answer_question
                 result = await loop.run_in_executor(
-                    None, partial(answer_question, body.question, "_", 1, True)
+                    None, partial(answer_question, body.question, "_", 1, True,
+                                  pre_classified="off_topic")
                 )
                 yield sse_result(_response_to_dict(result))
                 return
 
-            yield sse_step("classify_done", "Project question detected")
+            # Project query → full RAG pipeline
+            yield sse_step("classify_done", f"Project question detected (via {routing.source}, {routing.confidence:.0%})")
 
             # ── Step 2: Validate namespace ────────────────────────────────────
             if not body.namespace or not body.namespace.strip():
@@ -457,24 +497,57 @@ async def ask_stream(body: QueryRequest):
                 )
 
             elif ranked:
-                yield sse_step("clarify", "Preparing clarification question...")
-                svc = get_llm_service()
-                llm_resp = await loop.run_in_executor(
-                    None, partial(
-                        svc.generate_clarification,
-                        body.question, ranked[:5], ranked[0].confidence
-                    )
-                )
-                yield sse_step("clarify_done", "Clarification ready")
+                # Low embedding confidence but chunks exist.
+                # When LLM is configured, generate an answer instead of
+                # asking the user to rephrase.
+                from core.llm.config_store import load_config as _load_llm_cfg
+                llm_configured = _load_llm_cfg().configured
 
-                from core.retrieval.rag import _build_sources, RAGResponse
-                result = RAGResponse(
-                    answer=llm_resp.answer,
-                    confidence=ranked[0].confidence,
-                    no_data=False,
-                    mode="clarification",
-                    sources=_build_sources(ranked[:3]),
-                )
+                if llm_configured:
+                    yield sse_step("low_conf_llm",
+                        f"Low confidence ({ranked[0].confidence:.0%}) — generating LLM analysis...")
+                    svc = get_llm_service()
+
+                    # Use code review prompt for broad analytical questions
+                    from core.retrieval.planner import classify_question, QuestionType
+                    q_type = classify_question(body.question)
+                    if q_type == QuestionType.CODE_REVIEW:
+                        llm_resp = await loop.run_in_executor(
+                            None, partial(svc.generate_code_review, ranked[:8], body.question)
+                        )
+                    else:
+                        llm_resp = await loop.run_in_executor(
+                            None, partial(svc.generate_response, ranked[:5], body.question)
+                        )
+                    yield sse_step("generate_done", f"Answer ready ({llm_resp.mode})")
+
+                    from core.retrieval.rag import _build_sources, RAGResponse
+                    result = RAGResponse(
+                        answer=llm_resp.answer,
+                        confidence=ranked[0].confidence,
+                        no_data=llm_resp.no_data,
+                        mode=llm_resp.mode,
+                        sources=_build_sources(ranked[:5]),
+                    )
+                else:
+                    yield sse_step("clarify", "Preparing clarification question...")
+                    svc = get_llm_service()
+                    llm_resp = await loop.run_in_executor(
+                        None, partial(
+                            svc.generate_clarification,
+                            body.question, ranked[:5], ranked[0].confidence
+                        )
+                    )
+                    yield sse_step("clarify_done", "Clarification ready")
+
+                    from core.retrieval.rag import _build_sources, RAGResponse
+                    result = RAGResponse(
+                        answer=llm_resp.answer,
+                        confidence=ranked[0].confidence,
+                        no_data=False,
+                        mode="clarification",
+                        sources=_build_sources(ranked[:3]),
+                    )
             else:
                 from core.retrieval.rag import RAGResponse
                 result = RAGResponse(

@@ -39,8 +39,8 @@ class Settings:
 
     # ── LLM ───────────────────────────────────────────────────────────────────
     llm_model_file: str = "llama-3.2-3b-instruct.Q4_K_M.gguf"
-    llm_context_window: int = 4096
-    llm_max_tokens: int = 512
+    llm_context_window: int = 16384
+    llm_max_tokens: int = 2048
     llm_temperature: float = 0.1   # Low temp — we want citation accuracy, not creativity.
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
@@ -92,8 +92,8 @@ def load_settings() -> Settings:
         embedding_model=os.environ.get("BAKUP_EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
         model_cache_dir=Path(os.environ.get("BAKUP_MODEL_CACHE_DIR", "model-weights")),
         llm_model_file=os.environ.get("BAKUP_LLM_MODEL_FILE", "llama-3.2-3b-instruct.Q4_K_M.gguf"),
-        llm_context_window=int(os.environ.get("BAKUP_LLM_CONTEXT_WINDOW", "4096")),
-        llm_max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "512")),
+        llm_context_window=int(os.environ.get("BAKUP_LLM_CONTEXT_WINDOW", "16384")),
+        llm_max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
         llm_temperature=float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
         retrieval_top_k=int(os.environ.get("BAKUP_RETRIEVAL_TOP_K", "8")),
         confidence_threshold=float(os.environ.get("BAKUP_CONFIDENCE_THRESHOLD", "0.35")),

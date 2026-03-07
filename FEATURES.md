@@ -1,6 +1,6 @@
 # bakup.ai — Feature List
 
-Comprehensive list of all implemented features in bakup.ai.
+Comprehensive list of all implemented features in bakup.ai — the AI-powered project intelligence and production support assistant.
 
 ---
 
@@ -51,7 +51,9 @@ Comprehensive list of all implemented features in bakup.ai.
 | **Agentic retrieval planner** | ✅ | Classifies question type and generates multi-step retrieval plans |
 | **Multi-step agent executor** | ✅ | Executes retrieval plans sequentially, building structured evidence |
 | **Structured evidence bundling** | ✅ | Organises evidence by category: logs, code, deps, architecture, cross-analysis |
+| **Unified evidence routing** | ✅ | ALL question types receive the full evidence context — no data discarded at the last mile |
 | **Root-cause reasoning mode** | ✅ | Auto-correlates stack traces with code, retrieves deps, asks LLM for root cause |
+| **Code review mode** | ✅ | Broad analytical questions (optimize, review, improve) route through specialised code-review prompt |
 | **Session memory** | ✅ | Per-namespace conversation context for follow-up question support |
 | **Follow-up detection** | ✅ | Heuristic detection of follow-up questions using pronouns, short queries, markers |
 | **Error pattern clustering** | ✅ | Groups similar errors by exception type, message similarity, stack trace, file+line |
@@ -71,7 +73,9 @@ Comprehensive list of all implemented features in bakup.ai.
 | Architecture detection | ✅ | Detects "architecture", "project structure", "explain the project" |
 | Structural detection | ✅ | Detects "which files use/import X?", "what depends on X?" |
 | Log query detection | ✅ | Detects error/exception/traceback/crash keywords |
-| **Agentic question typing** | ✅ | Classifies: log_analysis, code_analysis, root_cause, architecture, structural, general |
+| **Code review detection** | ✅ | Detects "optimized", "review", "improve", "best practices", "code quality" patterns |
+| **Agentic question typing** | ✅ | Classifies: log_analysis, code_analysis, code_review, root_cause, architecture, structural, general |
+| **Default-to-project routing** | ✅ | Ambiguous questions default to PROJECT classification instead of being rejected |
 
 ---
 
@@ -82,13 +86,18 @@ Comprehensive list of all implemented features in bakup.ai.
 | Multi-provider support | ✅ | OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama, local llama.cpp |
 | Configurable via API | ✅ | `POST /llm/configure` with provider, model, API key |
 | SSE streaming | ✅ | `POST /ask/stream` returns Server-Sent Events for real-time output |
-| Extractive fallback | ✅ | Returns raw chunks when LLM is not configured (no hallucination) |
+| Extractive fallback | ✅ | Returns structured top-5 chunks when LLM is not configured (no hallucination) |
 | Citation-enforced prompts | ✅ | System prompts require source citations and NO_ANSWER signal |
 | Log summarization prompt | ✅ | Structured incident report: summary, findings, patterns, distribution |
 | Cross-analysis prompt | ✅ | Root-cause analysis: error→code mapping, call chains, suggested fixes |
+| Code review prompt | ✅ | Structured code quality review: strengths, issues, architecture, recommendations |
 | Conversational prompt | ✅ | Professional identity-aware responses for meta questions |
 | Clarification mode | ✅ | Asks user to refine query when confidence is low |
 | **Agentic reasoning prompt** | ✅ | Multi-step root-cause analysis with evidence chain, impact assessment, recommendations |
+| **Unified agentic answer generation** | ✅ | All question types route through a single reasoning method with mode-appropriate system prompts |
+| **Response quality gate** | ✅ | Detects truncated or too-short responses and auto-retries with a larger token budget |
+| **Deep context window** | ✅ | 16K context window with 2048 max output tokens (4x increase from initial config) |
+| **Rich evidence context** | ✅ | Up to 12 log chunks + 12 code chunks + 2500-char architecture + deps + cross-analysis sent to LLM |
 
 ---
 
@@ -151,4 +160,4 @@ Comprehensive list of all implemented features in bakup.ai.
 
 ---
 
-*Last updated: Agentic Retrieval v3 upgrade*
+*Last updated: Reasoning Engine v5 upgrade (unified evidence routing, quality gate, deep context)*

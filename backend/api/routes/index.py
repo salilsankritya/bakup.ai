@@ -331,6 +331,19 @@ async def index_github(body: IndexGitHubRequest) -> IndexResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"GitHub ingestion failed: {exc}")
 
+    if stored == 0:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No chunks were produced from this repository. "
+                "Possible causes:\n"
+                "• The repository could not be cloned (check the URL and branch).\n"
+                "• The repository is empty or contains no supported file types.\n"
+                "• For private repos, embed a personal access token in the URL: "
+                "https://<token>@github.com/owner/repo.git"
+            ),
+        )
+
     return IndexResponse(
         status="ok",
         namespace=namespace,

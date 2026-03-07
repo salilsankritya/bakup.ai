@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bakup.ai — Local-First Incident Intelligence</title>
-  <meta name="description" content="Bakup.ai ingests your codebase and log folders locally, analyzes errors across multiple files with severity tagging, and returns structured summaries with confidence scores. No data leaves your machine." />
+  <title>Bakup.ai — AI Project Intelligence & Production Support</title>
+  <meta name="description" content="Bakup.ai is a local-first AI project intelligence assistant. It indexes your codebase and logs, reasons over structured evidence — correlating errors with source code, tracing dependency chains, and producing root-cause analysis with confidence scores. No data leaves your machine." />
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -28,14 +28,14 @@
     <div class="container hero__inner">
       <div class="hero__content animate-fade-in">
         <h1 class="hero__headline">
-          Understand any incident.<br />
-          Without leaving your laptop.
+          Your AI production support engineer.<br />
+          Runs entirely on your machine.
         </h1>
         <p class="hero__sub">
-          Bakup.ai recursively ingests your codebase and log folders locally,
-          analyzes errors across multiple files with severity tagging, and returns
-          structured summaries — with file references and confidence scores
-          attached to every answer.
+          Bakup.ai indexes your codebase and logs, then reasons over structured
+          evidence like an experienced engineer — correlating errors with source
+          code, tracing dependency chains, detecting error trends, and producing
+          root-cause analysis with confidence scores and actionable recommendations.
         </p>
         <div class="hero__cta">
           <a href="#preview" class="btn btn--primary">Request Developer Preview Access</a>
@@ -43,7 +43,7 @@
         </div>
         <ul class="trust-badges">
           <li class="badge">Local-only</li>
-          <li class="badge">Read-only access</li>
+          <li class="badge">Reasons like an engineer</li>
           <li class="badge">No data leaves your machine</li>
         </ul>
       </div>
@@ -74,24 +74,25 @@
           <span class="step__num">02</span>
           <h3 class="step__title">Ask what happened</h3>
           <p class="step__body">
-            Type a question in plain English. Bakup searches across your code
-            and all indexed log files — correlating errors across multiple
-            sources to surface the most relevant matches.
+            Type a question in plain English. Bakup builds a multi-step retrieval
+            plan, searches across code and logs, extracts code references from
+            stack traces, resolves dependencies, and correlates errors with source
+            code — all automatically.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">$</span>
-            <span class="terminal__cmd">bakup ask "Have we seen this null pointer before?"</span>
+            <span class="terminal__cmd">bakup ask "What's causing the connection timeouts?"</span>
           </div>
         </div>
 
         <div class="step">
           <span class="step__num">03</span>
-          <h3 class="step__title">Get a structured summary with citations</h3>
+          <h3 class="step__title">Get a structured root-cause analysis</h3>
           <p class="step__body">
-            Responses include a structured summary referencing the specific files,
-            functions, and log lines that informed the answer — with cross-file
-            error distribution and a multi-factor confidence score. You decide
-            what to act on.
+            Responses include a structured analysis with error-to-code mapping,
+            dependency chain tracing, trend detection, impact assessment,
+            and actionable recommendations — all citing specific files,
+            functions, and line numbers from your own code.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">&gt;</span>
@@ -124,29 +125,29 @@
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           </div>
-          <h3 class="pillar__title">Recursive log folder ingestion</h3>
-          <p class="pillar__body">Point Bakup at a directory. It walks every subfolder, finds <code>.log</code> and <code>.out</code> files, and indexes each entry individually.</p>
+          <h3 class="pillar__title">Agentic multi-step reasoning</h3>
+          <p class="pillar__body">Every question triggers a multi-step retrieval plan: semantic search, keyword matching, code reference extraction, dependency resolution, and log-to-code cross-analysis — all orchestrated automatically.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
           </div>
-          <h3 class="pillar__title">Cross-file error aggregation</h3>
-          <p class="pillar__body">Errors are correlated across multiple log files. The response tells you which files are affected, how errors are distributed, and where the dominant failure source is.</p>
+          <h3 class="pillar__title">Log-to-code root-cause analysis</h3>
+          <p class="pillar__body">Errors in logs are automatically linked to source code via stack traces and file references. The engine traces dependency chains and produces structured error-to-code mapping with fix suggestions.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
-          <h3 class="pillar__title">Severity-aware analysis</h3>
-          <p class="pillar__body">Each log entry is automatically tagged as <code>error</code>, <code>warning</code>, or <code>info</code> at ingestion time. Retrieval and scoring prioritize higher-severity results.</p>
+          <h3 class="pillar__title">Error clustering & trend detection</h3>
+          <p class="pillar__body">Similar errors are grouped into clusters. Time-based trend analysis detects spikes, regressions, and newly introduced failures — so you know whether errors are growing, stable, or resolved.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           </div>
-          <h3 class="pillar__title">Structured summaries with confidence</h3>
-          <p class="pillar__body">Answers include a multi-factor confidence score weighing similarity, error volume, severity, recency, pattern consistency, and cross-file corroboration.</p>
+          <h3 class="pillar__title">Causal confidence scoring</h3>
+          <p class="pillar__body">Every answer includes a multi-factor confidence score weighing error frequency, stack trace quality, code match strength, dependency involvement, and time trends — so you know how much to trust the analysis.</p>
         </div>
       </div>
     </div>
@@ -214,10 +215,11 @@
             engineers for early testing and feedback.
           </p>
           <p class="preview__body">
-            It works. Recursive folder ingestion, cross-file error aggregation,
-            severity tagging, and multi-factor confidence scoring are operational.
+            It works. Agentic multi-step retrieval, log-to-code cross-analysis,
+            root-cause reasoning, error clustering, trend detection, causal
+            confidence scoring, and code quality review are all operational.
             The installation experience is minimal and the interface is sparse.
-            This is intentional — we are testing the engine, not the wrapper.
+            This is intentional — we are testing the reasoning engine, not the wrapper.
           </p>
           <ul class="preview__list">
             <li><strong>What this is:</strong> A working local binary. A real answer to the question: does this actually help during an incident?</li>
@@ -367,6 +369,22 @@ http://127.0.0.1:8000</code></pre>
       <h2 class="section__title">Changelog</h2>
 
       <div class="changelog__entry">
+        <h3 class="changelog__version">v0.2.0 <span class="changelog__date">— March 2026 · Reasoning Engine</span></h3>
+        <ul class="changelog__list">
+          <li>Agentic multi-step retrieval — classifies question type and generates a retrieval plan per query.</li>
+          <li>Unified evidence routing — all question types receive the full evidence context (logs, code, deps, architecture, cross-analysis).</li>
+          <li>Log-to-code root-cause analysis — auto-correlates stack traces with source code and traces dependency chains.</li>
+          <li>Error pattern clustering — groups similar errors by type, message, stack trace, and source location.</li>
+          <li>Time-based trend detection — detects error spikes, regressions, and newly introduced failures.</li>
+          <li>Causal confidence scoring — 5-factor weighted score: frequency, stack trace, code match, deps, trend.</li>
+          <li>Code review mode — broad analytical questions trigger a structured code quality analysis.</li>
+          <li>Response quality gate — detects truncated LLM output and auto-retries with a larger token budget.</li>
+          <li>Deep context window — 16K context, 2048 max output tokens, up to 12 log + 12 code chunks per query.</li>
+          <li>Session memory — per-project conversation context for follow-up question support.</li>
+        </ul>
+      </div>
+
+      <div class="changelog__entry">
         <h3 class="changelog__version">v0.1.0 <span class="changelog__date">— March 2026 · Developer Preview</span></h3>
         <ul class="changelog__list">
           <li>Recursive log folder ingestion — walks subdirectories, indexes <code>.log</code> and <code>.out</code> files individually.</li>
@@ -406,7 +424,7 @@ http://127.0.0.1:8000</code></pre>
         <a href="https://github.com/salilsankritya/bakup.ai" target="_blank" rel="noopener">GitHub</a>
         <a href="#privacy">Privacy</a>
       </nav>
-      <span class="footer__tagline">Built for engineers. Runs on your hardware.</span>
+      <span class="footer__tagline">AI production support. Runs on your hardware.</span>
     </div>
   </footer>
 

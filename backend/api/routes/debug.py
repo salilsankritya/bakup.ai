@@ -25,6 +25,7 @@ Endpoints:
   POST /debug/clusters                 — error pattern clusters for a query
   POST /debug/causal-confidence        — full causal confidence analysis
   POST /debug/trends                   — time-based trend detection
+  POST /debug/router                   — hybrid query router diagnostics
 """
 from __future__ import annotations
 
@@ -618,4 +619,57 @@ async def debug_trends(body: dict) -> dict:
             "regressions": tdr.regression_count,
             "new_errors": tdr.new_error_count,
         },
+    }
+
+
+# ── Hybrid query router diagnostics ──────────────────────────────────────────
+
+@router.post("/router")
+async def debug_router(body: dict) -> dict:
+    """
+    Run the hybrid query router for a query and return full diagnostics.
+
+    Shows:
+      - Routing intent (project_query / conversational / unrelated)
+      - Confidence score
+      - Classification source (llm or rules)
+      - Latency
+      - Routing decision (what pipeline would be executed)
+    """
+    question = body.get("question", "")
+    namespace = body.get("namespace", "")
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question required")
+
+    from core.router.router import route_query, CONFIDENCE_THRESHOLD
+
+    routing = route_query(
+        query=question,
+        namespace=namespace,
+    )
+
+    # Determine what the pipeline would do
+    if routing.intent == "project_query":
+        routing_decision = "planner + agent retrieval pipeline"
+    elif routing.intent == "conversational":
+        routing_decision = "conversational response (LLM direct or canned)"
+    else:
+        routing_decision = "polite scope message (unrelated to project)"
+
+    # Also run the legacy classifier for comparison
+    from core.classifier.query_classifier import classify_query
+    legacy_category = classify_query(question)
+
+    return {
+        "query": question,
+        "namespace": namespace,
+        "intent": routing.intent,
+        "confidence": round(routing.confidence, 3),
+        "source": routing.source,
+        "latency_ms": routing.latency_ms,
+        "routing_decision": routing_decision,
+        "confidence_threshold": CONFIDENCE_THRESHOLD,
+        "above_threshold": routing.confidence >= CONFIDENCE_THRESHOLD,
+        "legacy_classifier": legacy_category.value,
     }

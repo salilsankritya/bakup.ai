@@ -78,6 +78,13 @@ _PROJECT_STRONG: list[re.Pattern] = [
         r"line\s+\d+",
         r"which\s+(file|class|function|module|service|endpoint)",
         r"list\s+(all|the|files|classes|functions|errors|logs)",
+
+        # Code quality / review / optimization questions
+        r"optimiz|refactor|improve|code\s*(quality|review|smell)",
+        r"(is|are)\s+(the|this|it)\s+(code|codebase|project|app)\s+(good|bad|clean|messy|optimized|well)",
+        r"review\s+(the|this|my)\s+(code|codebase|project)",
+        r"(best\s+practice|anti.?pattern|technical\s+debt|code\s+coverage)",
+        r"(performance|security|scalab|maintainab|readab)\w*\s+(issue|problem|concern|improve)",
     ]
 ]
 
@@ -193,10 +200,11 @@ def classify_query(question: str) -> QueryCategory:
         if pat.search(q):
             return QueryCategory.PROJECT
 
-    # 6. Default: conversational — if nothing matches, let the LLM handle
-    #    it naturally instead of forcing through retrieval where the results
-    #    would be irrelevant.
-    return QueryCategory.CONVERSATIONAL
+    # 6. Default: project — assume the user is asking about their indexed
+    #    content.  It's better to attempt retrieval (and fall back to
+    #    "no relevant data found") than to skip retrieval entirely and
+    #    return a generic canned response.
+    return QueryCategory.PROJECT
 
 
 def greeting_response() -> str:
