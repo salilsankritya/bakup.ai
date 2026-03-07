@@ -14,7 +14,8 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 | Static UI serving | ✅ | HTML/CSS/JS app served via FastAPI StaticFiles mount |
 | Landing page | ✅ | Separate marketing page with download link |
 | Windows installer | ✅ | Inno Setup packaged binary (~240 MB, LZMA2 compressed) |
-| Port auto-detection | ✅ | Scans 8000–8019 for free port, updates CORS origins |
+| Port auto-detection | ✅ | Connect + bind dual-phase check, scans 8000-8019, uvicorn retry loop |
+| Port conflict recovery | ✅ | Catches Errno 10048 at bind time, retries up to 5 ports automatically |
 | Access key authentication | ✅ | SHA-256 hash check at startup |
 
 ---
@@ -157,7 +158,36 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 | Build orchestrator script | ✅ | `build.ps1` with skip flags and verbose mode |
 | Post-build cleanup | ✅ | Removes test/debug artifacts (~23 MB) |
 | AV false-positive mitigation | ✅ | No UPX, version info, console mode, no GPU binaries |
+| ASCII-safe console output | ✅ | All print statements use ASCII dashes (no Unicode em-dashes) |
+| UTF-8 console support | ✅ | Launcher sets `chcp 65001` for Windows code page compatibility |
 
 ---
 
-*Last updated: Reasoning Engine v5 upgrade (unified evidence routing, quality gate, deep context)*
+## Production Deployment (v7)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Docker Compose volumes | ✅ | Named volumes (`bakup-vectordb`, `bakup-models`) for data persistence |
+| Nginx SSE proxy | ✅ | `/ask/stream` with `proxy_buffering off` for real-time SSE |
+| Nginx debug/download routes | ✅ | `/debug/*` and `/download` proxy routes added |
+| CORS environment variable | ✅ | `BAKUP_CORS_ORIGINS` env var for production domain whitelisting |
+| Memory limits | ✅ | Backend 4G, UI 2G container memory limits |
+| DEPLOY.md guide | ✅ | Complete deployment guide for VPS/Railway/Render |
+| `.dockerignore` | ✅ | Excludes vectordb, model-weights, .git from build context |
+
+---
+
+## Hosting & Distribution (v8)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| GitHub Pages landing page | ✅ | Live at `https://salilsankritya.github.io/bakup.ai` |
+| GitHub Releases installer | ✅ | 241 MB installer hosted on GitHub Releases (v0.2.0) |
+| Auto-follow latest release | ✅ | Download URL uses `/releases/latest/download/` pattern |
+| Key-gated download | ✅ | Landing page requires access key before revealing download link |
+| `.nojekyll` | ✅ | Prevents Jekyll processing on GitHub Pages |
+| HOSTING.md guide | ✅ | Complete 0-to-100 hosting setup guide |
+
+---
+
+*Last updated: v8 Hosting & Distribution + port conflict fix (`c97ddc1`)*

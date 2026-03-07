@@ -54,11 +54,20 @@ bakup.ai is designed to become the **best AI production support assistant in the
 ```
 bakup.ai/
 ├── CONTEXT.md              ← THIS FILE
+├── .context.md             ← Detailed installer/build/pipeline context
+├── FEATURES.md             ← Complete feature list
+├── HOSTING.md              ← Landing page hosting & distribution guide
+├── DEPLOY.md               ← Production deployment guide (VPS/Railway/Render)
+├── TESTING_GUIDE.md        ← Comprehensive test instructions
+├── .nojekyll               ← Prevents Jekyll processing on GitHub Pages
 ├── .env / .env.example     ← Environment variables
 ├── .gitignore
 ├── docker-compose.yml      ← Two services: backend + ui (nginx)
 ├── README.md
-├── TESTING_GUIDE.md        ← Comprehensive test instructions
+├── index.html              ← Landing page (GitHub Pages)
+├── styles.css              ← Landing page styles
+├── fonts.css               ← Landing page fonts
+├── app.js                  ← Landing page key-gate + download logic
 │
 ├── ui/                     ← Frontend (static files)
 │   ├── index.html          ← 302 lines — single-page shell
@@ -209,86 +218,28 @@ python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1
 
 | Hash | Message | Date |
 |------|---------|------|
-| `a83360f` | feat: causal confidence scoring v4 — cluster ranking + structured reasoning | Latest committed |
-| `0831f23` | feat: agentic retrieval v3 — planner + agent executor + session memory | |
-| `a9353f0` | feat: agentic retrieval v2 — code review mode + evidence routing | |
-| `5693209` | feat: log intelligence upgrade — multi-factor confidence, trend detection, clustering | |
+| `c97ddc1` | fix: port conflict crash + garbled Unicode in Windows console | Latest |
+| `5dfb01d` | hosting: GitHub Pages + Releases setup for landing page distribution (tag: v0.2.0) | |
+| `4dd669c` | v7: production deployment - nginx SSE/debug/download routes, named volumes, CORS env, DEPLOY.md | |
+| `a83360f` | feat: causal confidence scoring + error pattern clustering (v4) | |
+| `0831f23` | feat: agentic retrieval system with multi-step reasoning | |
+| `a9353f0` | feat: project intelligence v2 - symbol graph, architecture summary, context bundling, log-code cross-analysis | |
+| `dd508dd` | feat: code-aware ingestion with language parsing, metadata extraction, and retrieval boosting | |
+| `5f7cca9` | fix: audit download endpoint - add HEAD support, nosniff, cache headers | |
+| `22f1d99` | feat: auto-detect free port when default is busy | |
+| `c53e240` | build: reduce AV false positives - disable UPX, add version info, expand excludes | |
+| `2b3d75e` | fix: installer audit - desktop shortcut, browser polling, context file | |
+| `5185951` | feat: compiled Windows installer distribution | |
+| `835d7ea` | fix: audit and fix all landing page links, add download ZIP, changelog, and privacy sections | |
+| `06c4eb5` | content: update landing page for multi-file log intelligence capabilities | |
+| `1c4e97b` | content: update website copy for multi-file log intelligence capabilities | |
+| `243d9f5` | feat: multi-file log intelligence, severity tagging, cross-file confidence, UI fixes & context doc | |
+| `5693209` | feat: log intelligence upgrade - multi-factor confidence, trend detection, clustering | |
 | `3197629` | feat: add query classifier with conversational/meta routing | |
-| `4d43282` | feat: bakup.ai — full platform with hybrid retrieval, debug diagnostics & SSE streaming | |
+| `4d43282` | feat: bakup.ai - full platform with hybrid retrieval, debug diagnostics & SSE streaming | |
 | `0757dd7` | Initial commit | |
 
-### Uncommitted Changes (as of 2026-03-07)
-
-These changes span **multiple feature sets** that haven't been committed yet:
-
-#### A. Previously Uncommitted (Enter-to-Send, Path Handling, Multi-File Log Intelligence)
-See prior CONTEXT.md versions for details — these remain uncommitted.
-
-#### B. Query Classifier & Routing Fix
-- `backend/core/classifier/query_classifier.py` — Default classification changed from CONVERSATIONAL to PROJECT; code review patterns added to `_PROJECT_STRONG`
-- `backend/api/routes/query.py` — Only short-circuits GREETING (not conversational/off_topic when namespace exists); namespace-aware routing; pre_classified param; low-confidence → LLM routing
-
-#### C. GitHub 0-Chunk Bug Fix
-- `backend/api/routes/index.py` — Returns 422 when indexing produces 0 chunks
-- `ui/app.js` — Shows user-friendly error on 0-chunk index result
-
-#### D. Reasoning Engine Upgrade (v5 — Major)
-Five critical pipeline fixes that transform the system from a search tool into a reasoning engine:
-
-#### E. Hybrid Query Router (v6)
-New pipeline entry point that replaces direct classifier routing:
-
-1. **Router Module** — `core/router/router.py`
-   - `route_query(query, namespace, session_context)` → `RoutingDecision(intent, confidence, source)`
-   - LLM-based classification via small JSON prompt when provider is configured
-   - Rule-based fallback using keyword banks + regex patterns (< 1 ms, no network)
-   - Fallback protection: confidence < 0.6 → forced to `project_query`
-   - Three intents: `project_query`, `conversational`, `unrelated`
-
-2. **Ingestion Filtering** — `core/ingestion/file_walker.py`
-   - Added `model-weights/`, `vectordb/` to `SKIP_DIRS`
-   - New `SKIP_EXTENSIONS` set: `.bin`, `.model`, `.vocab`, `.onnx`, `.pt`, `.pth`, `.safetensors`, `.gguf`, `.ggml`, `.pkl`, `.exe`, `.dll`, `.so`, images, audio, fonts, archives
-   - Both `walk_project()` and `list_indexed_files()` now check `SKIP_EXTENSIONS`
-
-3. **Route Integration** — `api/routes/query.py`
-   - Both `/ask` and `/ask/stream` now use `route_query()` as the first pipeline step
-   - Conversational/unrelated always short-circuited regardless of namespace
-   - Sub-classification via legacy classifier preserves greeting vs conversational distinction
-
-4. **Retrieval Guard** — `core/llm/llm_service.py`
-   - `_extractive_fallback()` now filters out chunks below confidence threshold
-   - Returns clarification prompt instead of irrelevant matches
-
-5. **Debug Endpoint** — `api/routes/debug.py`
-   - `POST /debug/router` — shows intent, confidence, source (llm/rules), latency, routing decision
-
-6. **Ignored Files for Ingestion**
-   - Directories: `model-weights/`, `vectordb/`, `node_modules/`, `dist/`, `build/`, `.venv/`
-   - Extensions: `.bin`, `.model`, `.vocab`, `.onnx`, `.pt`, `.pth`, `.safetensors`, `.gguf`, `.ggml`, `.pkl`, `.exe`, `.dll`, `.so`, `.dylib`, `.zip`, `.tar`, `.gz`, images, audio, fonts
-
-1. **Token Budget Increase** — `config.py`, `llm_service.py`
-   - `llm_context_window`: 4096 → 16384
-   - `llm_max_tokens`: 512 → 2048
-   - All 3 LLM providers (OpenAI, Azure, Ollama) updated
-
-2. **Unified Evidence Routing** — `rag.py`, `llm_service.py`
-   - ALL question types now route through `generate_agentic_answer()` with the full evidence context
-   - Previously, only ROOT_CAUSE got the full context; LOG_ANALYSIS, CROSS_ANALYSIS, CODE_REVIEW, and GENERAL discarded deps, architecture, and cross-analysis
-   - `generate_agentic_answer()` now supports 5 modes, each with an appropriate system prompt
-
-3. **Extractive Fallback Depth** — `llm_service.py`
-   - `_extractive_fallback()` shows top 5 chunks (was 1) with 1000 chars each (was 600)
-   - Structured headers with confidence scores and code blocks
-
-4. **Response Quality Gate** — `llm_service.py`
-   - New `_quality_gate()` method detects truncated or too-short responses
-   - Auto-retries with 2x token budget when LLM output is cut off
-   - Checks for truncation signals and missing terminal punctuation
-
-5. **Context Limits Increase** — `rag.py`, `llm_service.py`, `agent.py`
-   - `_LLM_CONTEXT_RESULTS`: 5 → 10 chunks
-   - `_MAX_CHUNK_CHARS`: 800 → 1200 per chunk
-   - `build_evidence_context()`: logs/code cap 8 → 12, architecture cap 1500 → 2500 chars
+All changes are committed and pushed to GitHub. No uncommitted changes.
 
 ---
 
@@ -423,7 +374,11 @@ chardet==5.2.0
 - The `vectordb/` directory persists ChromaDB data between restarts.
 - After code changes, **re-index** the project to populate new metadata fields (severity, file_name, etc.) in existing ChromaDB data.
 - The UI communicates with the backend via `http://localhost:8000` (hardcoded in `ui/app.js`).
-- All uncommitted changes listed in Section 6 are **tested and working** as of 2026-03-07.
+- All uncommitted changes listed in Section 6 are now **committed and pushed** as of 2026-03-07.
+- **Production Deployment v7**: Docker Compose with named volumes, nginx with SSE/debug/download proxy routes, CORS env var, DEPLOY.md guide.
+- **Hosting & Distribution v8**: Landing page live on GitHub Pages (`https://salilsankritya.github.io/bakup.ai`), installer on GitHub Releases (v0.2.0, 241 MB), HOSTING.md guide.
+- **Port conflict fix**: Dual-phase port detection (connect + bind), uvicorn retry loop for Errno 10048, re-validates port before server start.
+- **Unicode fix**: All print statements use ASCII dashes, launcher .bat sets `chcp 65001` for UTF-8 console.
 - **Reasoning Engine v5**: All question types now receive the full evidence context (logs + code + deps + architecture + cross-analysis). No evidence is discarded at the last mile. The response quality gate ensures LLM output is complete. Token budget of 2048 allows deep multi-section analysis.
 - **Hybrid Router v6**: Query routing uses LLM classification when available, with rule-based fallback. Conversational/unrelated queries are always short-circuited. Ingestion now excludes model-weights, vectordb, and binary files. Retrieval guard prevents low-confidence extractive matches from being surfaced.
 
@@ -486,6 +441,8 @@ Potential next steps, not yet started:
 8. **Auth improvements** — token-based auth instead of simple access key
 9. **Rate limiting** — protect endpoints from abuse
 10. **Automated tests** — pytest suite with fixtures covering the full pipeline
+11. **Custom domain** — configure custom domain (e.g., bakup.ai) for GitHub Pages landing page
+12. **Code signing** — sign the installer .exe to eliminate AV/SmartScreen warnings
 
 ---
 
