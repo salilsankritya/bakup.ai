@@ -136,11 +136,34 @@ if os.path.isdir(_ui_dir):
 
 # ── Auto-open browser ────────────────────────────────────────────────────────
 def _open_browser():
-    """Open the browser after a short delay to let the server start."""
+    """Poll the health endpoint until the server is ready, then open the browser."""
     import time
-    time.sleep(2)
+    import urllib.request
+    import urllib.error
+
     url = f"http://127.0.0.1:{settings.port}"
-    print(f"bakup: opening {url}")
+    health_url = f"{url}/health"
+    max_wait = 120          # seconds — first run downloads ~90 MB model
+    poll_interval = 1       # seconds between health checks
+    elapsed = 0
+
+    # Wait for uvicorn to start accepting connections
+    time.sleep(1)
+
+    while elapsed < max_wait:
+        try:
+            req = urllib.request.urlopen(health_url, timeout=2)
+            if req.status == 200:
+                print(f"bakup: server ready after {elapsed}s — opening {url}")
+                webbrowser.open(url)
+                return
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    # Fallback: open anyway so the user sees something
+    print(f"bakup: server not ready after {max_wait}s — opening browser anyway")
     webbrowser.open(url)
 
 

@@ -127,11 +127,13 @@ When bakup.ai runs:
 ```
 bakup-ai-installer.exe
 └── Installs to: <user>\AppData\Local\Programs\bakup-ai\
-    ├── bakup-launcher.bat          ← Entry point (Start menu shortcut)
+    ├── bakup-launcher.bat          ← Entry point (Start menu / desktop shortcut)
     ├── bakup-server\
     │   ├── bakup-server.exe        ← Compiled Python backend
     │   ├── ui\                     ← Static HTML/CSS/JS (served by FastAPI)
-    │   └── _internal\              ← Python runtime, torch, chromadb, etc.
+    │   ├── backend\                ← Bundled backend modules
+    │   ├── _internal\              ← Python runtime + wheel data
+    │   └── *.dll / *.pyd           ← Native extensions (torch, chromadb, etc.)
     └── data\                       ← Runtime data (created on first run)
         ├── vectordb\               ← ChromaDB persistent storage
         └── model-weights\          ← Embedding model cache
