@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
     from core.embeddings.model_cache import ensure_models_downloaded
     from core.retrieval.vector_store import init_vector_store
 
-    print(f"bakup: starting — data dir: {DATA_DIR}")
+    print(f"bakup: starting - data dir: {DATA_DIR}")
     ensure_models_downloaded()
     init_vector_store()
     print("bakup: ready.")
@@ -163,7 +163,7 @@ def _open_browser(port: int):
         try:
             req = urllib.request.urlopen(health_url, timeout=2)
             if req.status == 200:
-                print(f"bakup: server ready after {elapsed}s — opening {url}")
+                print(f"bakup: server ready after {elapsed}s - opening {url}")
                 webbrowser.open(url)
                 return
         except (urllib.error.URLError, OSError):
@@ -172,20 +172,44 @@ def _open_browser(port: int):
         elapsed += poll_interval
 
     # Fallback: open anyway so the user sees something
-    print(f"bakup: server not ready after {max_wait}s — opening browser anyway")
+    print(f"bakup: server not ready after {max_wait}s - opening browser anyway")
     webbrowser.open(url)
 
 
 if __name__ == "__main__":
-    # Launch browser in background thread
+    # Re-validate port right before starting (belt-and-suspenders)
+    from core.net import is_port_available, find_free_port
+    if not is_port_available(settings.host, settings.port):
+        old_port = settings.port
+        new_port = find_free_port(settings.host, start=old_port + 1)
+        print(f"bakup: port {old_port} is in use -- switching to {new_port}")
+        os.environ["BAKUP_PORT"] = str(new_port)
+        _config.settings = _config.load_settings()
+
+    # Launch browser in background thread (uses final port)
     browser_thread = threading.Thread(target=_open_browser, args=(settings.port,), daemon=True)
     browser_thread.start()
 
-    # Run server directly (not via string import)
-    uvicorn.run(
-        app,
-        host=settings.host,
-        port=settings.port,
-        log_level=settings.log_level,
-        access_log=True,
-    )
+    # Run server with port-conflict retry as safety net
+    max_port_retries = 5
+    port = settings.port
+
+    for attempt in range(max_port_retries):
+        try:
+            uvicorn.run(
+                app,
+                host=settings.host,
+                port=port,
+                log_level=settings.log_level,
+                access_log=True,
+            )
+            break   # clean exit
+        except OSError as e:
+            # Errno 10048 (Windows) / 98 (Linux): address already in use
+            if e.errno in (10048, 98) and attempt < max_port_retries - 1:
+                port += 1
+                print(f"bakup: port {port - 1} is in use -- retrying on {port}")
+                os.environ["BAKUP_PORT"] = str(port)
+                _config.settings = _config.load_settings()
+            else:
+                raise

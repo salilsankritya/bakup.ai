@@ -13,9 +13,25 @@ import socket
 def is_port_available(host: str, port: int) -> bool:
     """Return True if *port* on *host* can be bound (i.e. is free).
 
+    Uses a two-phase check:
+      1. **Connect test** — tries to connect to the port.  If something
+         accepts the connection, the port is definitely in use.
+      2. **Bind test** — tries to bind the port.  If the bind fails, the
+         port is in use even if nothing is accepting connections yet.
+
     Does NOT set SO_REUSEADDR — on Windows that flag allows "port stealing",
     which would make busy ports appear free.
     """
+    # Phase 1: if we can connect, something is already listening
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            s.connect((host, port))
+            return False          # connection succeeded → port is busy
+    except (OSError, ConnectionRefusedError):
+        pass                      # nothing listening — continue to bind test
+
+    # Phase 2: try to bind
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((host, port))
@@ -36,7 +52,7 @@ def find_free_port(host: str = "127.0.0.1", start: int = 8000,
         if is_port_available(host, candidate):
             return candidate
     raise RuntimeError(
-        f"bakup: no free port found in range {start}–{start + max_attempts - 1}"
+        f"bakup: no free port found in range {start}-{start + max_attempts - 1}"
     )
 
 
@@ -48,6 +64,6 @@ def resolve_port(host: str, preferred: int) -> int:
 
     actual = find_free_port(host, start=preferred + 1)
     print(
-        f"bakup: port {preferred} is in use — falling back to {actual}"
+        f"bakup: port {preferred} is in use -- falling back to {actual}"
     )
     return actual

@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     from core.embeddings.model_cache import ensure_models_downloaded
     from core.retrieval.vector_store import init_vector_store
 
-    print(f"bakup: starting — project path: {settings.project_path or '(none — use browser upload)'}")
+    print(f"bakup: starting - project path: {settings.project_path or '(none - use browser upload)'}")
     ensure_models_downloaded()
     init_vector_store()
     print("bakup: ready.")

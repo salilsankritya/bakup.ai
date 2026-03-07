@@ -1,15 +1,16 @@
 @echo off
+chcp 65001 >nul 2>&1
 :: ─────────────────────────────────────────────────────────────────────────────
-:: bakup.ai — Windows Launcher
+:: bakup.ai - Windows Launcher
 :: ─────────────────────────────────────────────────────────────────────────────
 :: This script starts the bakup.ai server and opens the browser.
 :: It is placed in the installation directory by the installer.
 :: ─────────────────────────────────────────────────────────────────────────────
 
-title bakup.ai — Local Incident Intelligence
+title bakup.ai - Local Incident Intelligence
 echo.
 echo  ========================================
-echo    bakup.ai — Local Incident Intelligence
+echo    bakup.ai - Local Incident Intelligence
 echo  ========================================
 echo.
 echo  Starting server...
