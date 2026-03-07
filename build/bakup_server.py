@@ -50,6 +50,35 @@ if getattr(sys, 'frozen', False):
 else:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
+# ── Torch CUDA stub ───────────────────────────────────────────────────────────
+# The PyInstaller build excludes torch.cuda (GPU not needed for CPU inference).
+# sentence-transformers / torch still try to import it at init time, which would
+# crash with "No module named 'torch.cuda'". Inject a lightweight stub so the
+# import succeeds and torch gracefully falls back to CPU-only mode.
+import importlib, types
+
+def _install_torch_stubs():
+    """Create minimal stubs for excluded torch accelerator modules."""
+    try:
+        import torch
+    except ImportError:
+        return  # torch itself not available yet
+    for mod_name in ("torch.cuda", "torch.xpu", "torch.mps", "torch.mtia"):
+        attr = mod_name.split(".")[1]  # cuda, xpu, mps, mtia
+        if importlib.util.find_spec(mod_name) is not None:
+            continue  # real module exists
+        stub = types.ModuleType(mod_name)
+        stub.is_available = lambda: False
+        stub.device_count = lambda: 0
+        stub.current_device = lambda: -1
+        stub.get_device_name = lambda *a, **kw: ""
+        stub.FloatTensor = None
+        sys.modules[mod_name] = stub
+        if not hasattr(torch, attr):
+            setattr(torch, attr, stub)
+
+_install_torch_stubs()
+
 # ── Import and run ────────────────────────────────────────────────────────────
 # Now import the actual app (this triggers access check + config load)
 from core.access import check_access_key

@@ -25,10 +25,33 @@ import numpy as np
 _model = None
 
 
+def _ensure_torch_cuda_stub():
+    """Ensure torch accelerator modules are importable (stubs for CPU-only builds)."""
+    import importlib, types as _t, sys as _sys
+    try:
+        import torch
+    except ImportError:
+        return
+    for mod_name in ("torch.cuda", "torch.xpu", "torch.mps", "torch.mtia"):
+        attr = mod_name.split(".")[1]
+        if importlib.util.find_spec(mod_name) is not None:
+            continue
+        stub = _t.ModuleType(mod_name)
+        stub.is_available = lambda: False
+        stub.device_count = lambda: 0
+        stub.current_device = lambda: -1
+        stub.get_device_name = lambda *a, **kw: ""
+        stub.FloatTensor = None
+        _sys.modules[mod_name] = stub
+        if not hasattr(torch, attr):
+            setattr(torch, attr, stub)
+
+
 def _get_model():
     """Load the embedding model once. Subsequent calls return the cached instance."""
     global _model
     if _model is None:
+        _ensure_torch_cuda_stub()
         from sentence_transformers import SentenceTransformer
 
         model_name = os.environ.get("BAKUP_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
