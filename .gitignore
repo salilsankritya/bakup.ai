@@ -15,6 +15,11 @@ model-weights/
 # Download artifacts (built locally)
 downloads/
 
+# Build artifacts
+dist/
+build/build/
+build/__pycache__/
+
 # OS files
 .DS_Store
 Thumbs.db

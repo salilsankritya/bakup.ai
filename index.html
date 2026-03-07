@@ -256,8 +256,8 @@
             <a
               class="btn btn--primary gate__download"
               id="download-link"
-              href="downloads/bakup-preview-0.1.0.zip"
-              download="bakup-preview-0.1.0.zip"
+              href="downloads/bakup-ai-installer.exe"
+              download="bakup-ai-installer.exe"
             >
               Download Developer Preview
             </a>
@@ -265,7 +265,7 @@
               <span class="gate__checksum-label">SHA-256</span>
               <code class="gate__checksum-value" id="checksum-value"></code>
             </div>
-            <p class="gate__platform-note">Runs on Windows, macOS, and Linux.</p>
+            <p class="gate__platform-note">Windows installer. macOS and Linux builds coming soon.</p>
           </div>
 
           <!-- Security disclaimer -->
@@ -286,23 +286,21 @@
   <section class="section section--quickstart" id="quickstart">
     <div class="container container--narrow">
       <h2 class="section__title">You'll have it running before your next standup.</h2>
-      <p class="quickstart__sub">Docker. Four steps. Under ten minutes.</p>
+      <p class="quickstart__sub">One installer. Three steps. Under five minutes.</p>
 
       <ol class="quickstart__steps">
         <li class="qs__step">
           <div class="qs__num">1</div>
           <div class="qs__body">
-            <p class="qs__desc">Unzip, copy the env file, and set your project path. Docker handles everything else.</p>
+            <p class="qs__desc">Download and run the installer. It sets up the application, creates a desktop shortcut, and configures all required directories.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
               </div>
-              <pre class="code-block__pre"><code><span class="code-comment"># Unzip the archive</span>
-unzip bakup-preview-0.1.0.zip &amp;&amp; cd bakup
-<span class="code-comment"># Configure — set BAKUP_PROJECT_PATH to your project directory</span>
-cp .env.example .env<span class="cursor">▌</span></code></pre>
+              <pre class="code-block__pre"><code><span class="code-comment"># Run the Windows installer</span>
+bakup-ai-installer.exe<span class="cursor">▌</span></code></pre>
             </div>
           </div>
         </li>
@@ -310,14 +308,15 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">2</div>
           <div class="qs__body">
-            <p class="qs__desc">Start the backend and local UI. First boot downloads the embedding model (~90 MB).</p>
+            <p class="qs__desc">Launch bakup.ai from the Start menu or desktop shortcut. The server starts automatically and opens your browser to the UI.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
               </div>
-              <pre class="code-block__pre"><code>docker compose up</code></pre>
+              <pre class="code-block__pre"><code><span class="code-comment"># Or launch from the command line</span>
+bakup-launcher.bat</code></pre>
             </div>
           </div>
         </li>
@@ -325,16 +324,15 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">3</div>
           <div class="qs__body">
-            <p class="qs__desc">Index your project and log folder. Bakup scans recursively and tags log entries by severity. Returns a namespace you use to query.</p>
+            <p class="qs__desc">Use the browser UI to point Bakup at your project. It scans recursively, indexes code and log files, and tags entries by severity.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
               </div>
-              <pre class="code-block__pre"><code>curl -s -X POST http://localhost:8000/index \
-  -H <span class="code-string">"Content-Type: application/json"</span> \
-  -d <span class="code-string">'{"path":"/your/project","log_path":"/your/project/logs"}'</span></code></pre>
+              <pre class="code-block__pre"><code><span class="code-comment"># Open in browser (auto-launched on start)</span>
+http://127.0.0.1:8000</code></pre>
             </div>
           </div>
         </li>
@@ -342,16 +340,15 @@ cp .env.example .env<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">4</div>
           <div class="qs__body">
-            <p class="qs__desc">Ask a question. Paste the namespace from step 3.</p>
+            <p class="qs__desc">Ask a question in the UI. Bakup returns a structured summary with file references and confidence scores.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
                 <span class="code-block__dot"></span>
               </div>
-              <pre class="code-block__pre"><code>curl -s -X POST http://localhost:8000/ask \
-  -H <span class="code-string">"Content-Type: application/json"</span> \
-  -d <span class="code-string">'{"question":"Have we seen connection timeouts before?","namespace":"&lt;from step 3&gt;"}'</span></code></pre>
+              <pre class="code-block__pre"><code><span class="code-comment"># Example: ask about errors across your logs</span>
+"Have we seen connection timeouts before?"</code></pre>
             </div>
           </div>
         </li>

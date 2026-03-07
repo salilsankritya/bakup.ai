@@ -26,9 +26,9 @@ const VALID_KEY_HASH = '7063d51d1b2da165eee042de5d33cc27281ea80e1a291488c903b7fb
 // Download artefact served when the key validates.
 // Replace url with your real CDN path before deploying.
 const DOWNLOAD_CONFIG = {
-  url:      'downloads/bakup-preview-0.1.0.zip', // relative or absolute CDN path
+  url:      'downloads/bakup-ai-installer.exe', // relative or absolute CDN path
   checksum: '', // populated alongside VALID_KEY_HASH at deploy time
-  filename: 'bakup-preview-0.1.0.zip',
+  filename: 'bakup-ai-installer.exe',
 };
 
 // ─── Utility: SHA-256 via Web Crypto ─────────────────────────────────────────
