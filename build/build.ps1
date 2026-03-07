@@ -136,6 +136,38 @@ if (-not $SkipPyInstaller) {
 
     $exeSize = [math]::Round((Get-Item $exePath).Length / 1MB, 1)
     Write-Host "  Compiled: $exePath ($exeSize MB)" -ForegroundColor Green
+
+    # ── Post-compile cleanup: remove test/debug artifacts from dist ──────────
+    Write-Host "  Cleaning test and debug artifacts from dist..." -ForegroundColor Gray
+    $internalDir = Join-Path $DistDir "bakup-server\_internal"
+    $cleanupDirs = @(
+        # pytest cache shipped from backend source
+        (Join-Path $internalDir "backend\.pytest_cache"),
+        # chromadb test suite
+        (Join-Path $internalDir "chromadb\test"),
+        # torch subsystems excluded by spec but may leak via collect_all
+        (Join-Path $internalDir "torch\testing"),
+        (Join-Path $internalDir "torch\distributed"),
+        (Join-Path $internalDir "torch\_inductor"),
+        (Join-Path $internalDir "torch\_dynamo"),
+        (Join-Path $internalDir "torch\onnx"),
+        (Join-Path $internalDir "torch\_export"),
+        (Join-Path $internalDir "torch\profiler"),
+        (Join-Path $internalDir "torch\package"),
+        (Join-Path $internalDir "torch\compiler")
+    )
+    $removedMB = 0
+    foreach ($d in $cleanupDirs) {
+        if (Test-Path $d) {
+            $size = (Get-ChildItem $d -Recurse -File -ErrorAction SilentlyContinue |
+                     Measure-Object -Property Length -Sum).Sum
+            $removedMB += $size
+            Remove-Item $d -Recurse -Force
+        }
+    }
+    $removedMB = [math]::Round($removedMB / 1MB, 1)
+    Write-Host "  Removed $removedMB MB of test/debug artifacts." -ForegroundColor Gray
+
     Write-Host ""
 } else {
     Write-Host "[3/5] Skipping PyInstaller (--SkipPyInstaller)." -ForegroundColor Gray

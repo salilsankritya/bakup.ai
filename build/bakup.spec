@@ -162,22 +162,65 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude GUI toolkits we don't need
+        # GUI toolkits — not used
         "tkinter",
+        "_tkinter",
         "matplotlib",
         "PIL",
+        "Pillow",
         "IPython",
         "jupyter",
         "notebook",
-        # Exclude test frameworks
+        "ipykernel",
+        "ipywidgets",
+
+        # Test frameworks — not needed in production
         "pytest",
         "_pytest",
+        "unittest",
+        "doctest",
+
+        # Torch subsystems — we only need CPU inference
+        "torch.testing",
+        "torch.distributed",
+        "torch._inductor",
+        "torch._dynamo",
+        "torch.onnx",
+        "torch._export",
+        "torch.ao",
+        "torch.profiler",
+        "torch.package",
+        "torch.compiler",
+        "torch.cuda",
+        "torch.xpu",
+        "torch.mps",
+        "torch.mtia",
+
+        # Dev/build tools — not needed at runtime
+        "setuptools",
+        "distutils",
+        "pip",
+        "ensurepip",
+        "venv",
+        "lib2to3",
+        "pydoc",
+        "pdb",
+        "cProfile",
+        "profile",
+
+        # Tensorboard — pulled by torch but not used
+        "tensorboard",
+        "tensorboard_data_server",
     ],
     noarchive=False,
 )
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 pyz = PYZ(a.pure)
+
+# Version info — gives the .exe proper metadata (Company, Description, etc.)
+# Without this, AV heuristics flag the binary as "unknown publisher" more aggressively.
+VERSION_FILE = os.path.join(SPEC_DIR, "version_info.txt")
 
 exe = EXE(
     pyz,
@@ -188,9 +231,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,     # UPX disabled — packed binaries trigger AV false positives
     console=True,  # Console app so users can see server logs
     icon=None,     # Add icon later: icon='../assets/bakup.ico'
+    version=VERSION_FILE if os.path.exists(VERSION_FILE) else None,
 )
 
 coll = COLLECT(
@@ -198,7 +242,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,     # UPX disabled — matches EXE setting
     upx_exclude=[],
     name="bakup-server",
 )
