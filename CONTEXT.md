@@ -43,7 +43,7 @@ bakup.ai is designed to become the **best AI production support assistant in the
 | **Frontend** | Vanilla HTML/CSS/JS | Port 3000 (dev) or nginx (Docker) |
 | **Embeddings** | sentence-transformers | `all-MiniLM-L6-v2`, dim=384 |
 | **Vector DB** | ChromaDB | Persistent at `./vectordb`, cosine distance |
-| **LLM Providers** | OpenAI, Azure OpenAI, Ollama | Configurable via UI or API |
+| **LLM Providers** | OpenAI, Anthropic, Azure OpenAI, Ollama | Configurable via UI or API |
 | **Containerization** | Docker Compose | backend + nginx (ui) |
 | **Git** | GitHub | `https://github.com/salilsankritya/bakup.ai.git`, branch `main` |
 
@@ -85,11 +85,17 @@ bakup.ai/
 │   ├── api/routes/
 │   │   ├── health.py       ← GET /health
 │   │   ├── index.py        ← POST /index, /index/github, /index/upload
-│   │   ├── query.py        ← POST /ask, /ask/stream (SSE)
+│   │   ├── query.py        ← POST /ask, /ask/stream (SSE) — routes via brain controller
 │   │   ├── llm_config.py   ← GET/PUT /llm/config, /llm/status, /llm/test
-│   │   └── debug.py        ← Diagnostic endpoints
+│   │   └── debug.py        ← Diagnostic endpoints incl. /debug/brain
 │   │
 │   ├── core/access.py      ← Startup access key gate
+│   │
+│   ├── core/brain/
+│   │   ├── __init__.py     ← Brain module init
+│   │   ├── brain.py        ← Brain controller — LLM-orchestrated tool loop + fallback
+│   │   ├── tools.py        ← Tool interface layer (8 tools wrapping retrieval/analysis)
+│   │   └── prompt_templates.py ← Brain system prompt for tool-calling orchestration
 │   │
 │   ├── core/ingestion/
 │   │   ├── chunker.py      ← Chunk dataclass + text chunking (line-window)
@@ -123,7 +129,7 @@ bakup.ai/
 │   │
 │   └── core/llm/
 │       ├── config_store.py ← JSON storage for LLM config (API keys masked)
-│       ├── llm_service.py  ← LLM abstraction (OpenAI, Azure, Ollama) + quality gate + unified agentic generation
+│       ├── llm_service.py  ← LLM abstraction (OpenAI, Anthropic, Azure, Ollama) + tool calling + quality gate
 │       └── prompt_templates.py ← All system prompts (RAG, agentic reasoning, code review, log summary, cross-analysis, conversational)
 │
 ├── sample-project/         ← Test project with logs and source code
@@ -157,6 +163,8 @@ bakup.ai/
 | LLM Max Tokens | 2048 | `BAKUP_LLM_MAX_TOKENS` env var |
 | LLM Temperature | 0.1 | `BAKUP_LLM_TEMPERATURE` env var |
 | Router Confidence Threshold | 0.60 | Below this → falls back to project_query |
+| Max Tool Calls | 5 | `BAKUP_MAX_TOOL_CALLS` — brain tool budget per query |
+| App Mode | local | `BAKUP_APP_MODE` — local or cloud |
 | LLM Context Results | 10 | Max chunks sent to LLM per query |
 | Max Chunk Chars | 1200 | Per-chunk character limit in LLM context |
 | Evidence Logs Cap | 12 | Max log chunks in evidence context |
@@ -266,40 +274,38 @@ POST /index { path, log_path?, namespace? }
 POST /ask { question, namespace, top_k?, debug? }
   → route_query() via hybrid router:
       1. Try LLM classification (if provider configured)
-      2. If LLM confidence ≥ 0.6 → use LLM intent
+      2. If LLM confidence >= 0.6 → use LLM intent
       3. Otherwise → rule-based classification
-      4. If rule confidence < 0.6 and intent ≠ project_query → force project_query
-  → If conversational → LLM direct call or canned response (no retrieval)
-  → If unrelated → scope guard response
+      4. If rule confidence < 0.6 and intent != project_query → force project_query
+  → If conversational → brain.process_query() → LLM direct or canned response
+  → If unrelated → brain.process_query() → scope guard response
   → If project_query:
+      → brain.process_query() decides mode:
+
+      [BRAIN MODE — LLM configured + supports tool calling]
+      → LLM receives user query + tool schemas + session context
+      → LLM decides which tools to call:
+          - search_logs, search_code, retrieve_dependencies
+          - get_architecture_summary, get_error_clusters
+          - get_file_context, query_symbol_graph, cross_analyse
+      → Tools execute and return JSON evidence
+      → Evidence fed back to LLM for more tool calls or final answer
+      → Up to max_tool_calls (default 5) iterations
+      → Final answer grounded in tool evidence with citations
+
+      [FALLBACK MODE — no LLM or no tool calling]
       → Agentic planner classifies question type:
           LOG_ANALYSIS | CODE_ANALYSIS | CODE_REVIEW | ROOT_CAUSE | ARCHITECTURE | STRUCTURAL | GENERAL
-      → Generates multi-step retrieval plan (2–5 steps per question type)
+      → Generates multi-step retrieval plan (2-5 steps per question type)
       → Agent executor runs each step:
           1. Semantic search → top chunks
           2. Keyword search → error/exception/traceback matches
           3. Code reference extraction → file:line from stack traces
           4. Dependency resolution → import/call graph traversal
           5. Cross-analysis → log-to-code linking
-      → Structured evidence built:
-          - Log chunks (up to 12, 1200 chars each)
-          - Code chunks (up to 12, 1200 chars each)
-          - Dependencies list
-          - Architecture summary (up to 2500 chars)
-          - Cross-analysis context
-          - Error clusters, trends, confidence scoring
-      → build_evidence_context() → coherent context block for LLM
-      → ALL question types route through generate_agentic_answer():
-          - ROOT_CAUSE → SYSTEM_AGENTIC_REASONING prompt
-          - CROSS_ANALYSIS → SYSTEM_CROSS_ANALYSIS prompt
-          - LOG_ANALYSIS → SYSTEM_LOG_SUMMARY prompt
-          - CODE_REVIEW → SYSTEM_CODE_REVIEW prompt
-          - GENERAL → SYSTEM_RAG prompt
-      → Quality gate checks response:
-          - Min length (120 chars)
-          - Truncation detection (missing terminal punctuation, truncation signals)
-          - Auto-retry with 2x token budget if quality check fails
-      → Structured answer returned with confidence scores and source citations
+      → Structured evidence built and sent to LLM (or extractive fallback)
+
+      → Result stored in brain debug cache
       → Turn stored in session memory for follow-up support
 ```
 
@@ -323,6 +329,7 @@ Applied at ingestion time in `log_parser.py`:
 Configured via UI settings panel or `PUT /llm/config`:
 - **Ollama** (default) — local, no API key needed, model: `llama3`
 - **OpenAI** — requires API key, model: `gpt-4o-mini`
+- **Anthropic (Claude)** — requires API key, model: `claude-sonnet-4-20250514`
 - **Azure OpenAI** — requires API key + endpoint + deployment name
 
 ---
@@ -344,6 +351,8 @@ Configured via UI settings panel or `PUT /llm/config`:
 | GET | `/debug/stats/{namespace}` | Collection stats |
 | GET | `/debug/sample/{namespace}` | Sample chunks |
 | POST | `/debug/router` | Hybrid router diagnostics |
+| GET | `/debug/brain` | Brain controller state + tools |
+| GET | `/debug/brain/{namespace}` | Last brain result for namespace |
 
 ---
 
@@ -381,6 +390,7 @@ chardet==5.2.0
 - **Unicode fix**: All print statements use ASCII dashes, launcher .bat sets `chcp 65001` for UTF-8 console.
 - **Reasoning Engine v5**: All question types now receive the full evidence context (logs + code + deps + architecture + cross-analysis). No evidence is discarded at the last mile. The response quality gate ensures LLM output is complete. Token budget of 2048 allows deep multi-section analysis.
 - **Hybrid Router v6**: Query routing uses LLM classification when available, with rule-based fallback. Conversational/unrelated queries are always short-circuited. Ingestion now excludes model-weights, vectordb, and binary files. Retrieval guard prevents low-confidence extractive matches from being surfaced.
+- **Brain Architecture v9**: `/ask` route now goes through `brain.process_query()`. When an LLM with tool-calling support is configured, the brain orchestrates 8 tools (search_logs, search_code, retrieve_dependencies, get_architecture_summary, get_error_clusters, get_file_context, query_symbol_graph, cross_analyse) in an iterative loop (max 5 calls per query). Falls back to the deterministic planner→agent pipeline when no LLM is configured. Anthropic Claude added as a new provider alongside OpenAI/Azure/Ollama. Cloud mode config (`BAKUP_APP_MODE=local|cloud`) added. Debug endpoints: `GET /debug/brain` and `GET /debug/brain/{ns}`.
 
 ---
 

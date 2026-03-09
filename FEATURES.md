@@ -84,7 +84,8 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Multi-provider support | ✅ | OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama, local llama.cpp |
+| Multi-provider support | ✅ | OpenAI, Anthropic (Claude), Azure OpenAI, Ollama, local llama.cpp |
+| Anthropic Claude support | ✅ | Native Messages API integration via urllib (no extra dependency) |
 | Configurable via API | ✅ | `POST /llm/configure` with provider, model, API key |
 | SSE streaming | ✅ | `POST /ask/stream` returns Server-Sent Events for real-time output |
 | Extractive fallback | ✅ | Returns structured top-5 chunks when LLM is not configured (no hallucination) |
@@ -99,6 +100,25 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 | **Response quality gate** | ✅ | Detects truncated or too-short responses and auto-retries with a larger token budget |
 | **Deep context window** | ✅ | 16K context window with 2048 max output tokens (4x increase from initial config) |
 | **Rich evidence context** | ✅ | Up to 12 log chunks + 12 code chunks + 2500-char architecture + deps + cross-analysis sent to LLM |
+
+---
+
+## Brain Architecture (LLM-Orchestrated Reasoning)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Brain controller** | ✅ | Central `process_query()` orchestrates LLM tool-calling loop or falls back to deterministic pipeline |
+| **Tool interface layer** | ✅ | 8 tools wrapping retrieval/analysis: search_logs, search_code, retrieve_dependencies, get_architecture_summary, get_error_clusters, get_file_context, query_symbol_graph, cross_analyse |
+| **LLM tool calling** | ✅ | `call_with_tools()` supports OpenAI, Anthropic, Azure OpenAI, Ollama function-calling formats |
+| **Tool loop** | ✅ | Iterative tool-call loop: LLM requests tools → tools execute → results fed back → LLM reasons |
+| **Tool budget** | ✅ | `max_tool_calls=5` per query prevents runaway tool usage |
+| **Auto-inject namespace** | ✅ | Brain auto-injects namespace and top_k into tool arguments |
+| **Graceful fallback** | ✅ | Falls back to deterministic RAG pipeline when LLM is not configured or doesn't support tools |
+| **Brain debug endpoint** | ✅ | `GET /debug/brain` shows brain state, tools, provider; `GET /debug/brain/{ns}` shows last result |
+| **Brain debug cache** | ✅ | Last brain result per namespace stored for inspection via debug API |
+| **Provider tool format** | ✅ | Tool schemas auto-converted to OpenAI or Anthropic format based on provider |
+| **Cloud mode config** | ✅ | `BAKUP_APP_MODE=local|cloud` env var for deployment mode selection |
+| **Session context in brain** | ✅ | Follow-up detection injects prior conversation into brain's LLM context |
 
 ---
 
@@ -131,6 +151,7 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 | **Causal confidence diagnostics** | ✅ | `POST /debug/causal-confidence` — full scoring pipeline with factor breakdown |
 | **Trend detection diagnostics** | ✅ | `POST /debug/trends` — per-cluster time trends, spike/regression alerts |
 | **Causal confidence in pipeline trace** | ✅ | Score, dominant error, and trend alerts in debug trace |
+| **Brain diagnostics** | ✅ | `GET /debug/brain` shows LLM state, tool list, brain mode; `GET /debug/brain/{ns}` shows last result with tool call trace |
 | Console debug logging | ✅ | Detailed per-request logging: classification, retrieval, LLM calls |
 
 ---
@@ -190,4 +211,4 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 
 ---
 
-*Last updated: v8 Hosting & Distribution + port conflict fix (`c97ddc1`)*
+*Last updated: v9 Brain Architecture — LLM-orchestrated tool-calling + Anthropic provider*

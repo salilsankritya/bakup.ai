@@ -47,6 +47,14 @@ class Settings:
     retrieval_top_k: int = 8
     confidence_threshold: float = 0.35  # Results below this are labeled low-confidence.
 
+    # ── Application mode ──────────────────────────────────────────────────────
+    # "local"  — single-user desktop mode (default).
+    # "cloud"  — multi-tenant cloud mode with shared project index.
+    app_mode: str = "local"
+
+    # ── Brain (LLM-orchestrated reasoning) ────────────────────────────────────
+    max_tool_calls: int = 5     # Max tool invocations per query in brain mode.
+
 
 def _require(name: str, value: str, hint: str = "") -> str:
     if not value.strip():
@@ -97,6 +105,8 @@ def load_settings() -> Settings:
         llm_temperature=float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
         retrieval_top_k=int(os.environ.get("BAKUP_RETRIEVAL_TOP_K", "8")),
         confidence_threshold=float(os.environ.get("BAKUP_CONFIDENCE_THRESHOLD", "0.35")),
+        app_mode=os.environ.get("BAKUP_APP_MODE", "local").lower(),
+        max_tool_calls=int(os.environ.get("BAKUP_MAX_TOOL_CALLS", "5")),
     )
 
 

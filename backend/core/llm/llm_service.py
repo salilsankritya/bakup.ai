@@ -635,6 +635,8 @@ class LLMService:
     ) -> str:
         if cfg.provider == "openai":
             return self._call_openai(cfg, user_message, system_prompt)
+        if cfg.provider == "anthropic":
+            return self._call_anthropic(cfg, user_message, system_prompt)
         if cfg.provider == "azure_openai":
             return self._call_azure(cfg, user_message, system_prompt)
         if cfg.provider == "ollama":
@@ -645,12 +647,287 @@ class LLMService:
         """Lightweight connectivity check — raises on failure."""
         if cfg.provider == "openai":
             self._ping_openai(cfg)
+        elif cfg.provider == "anthropic":
+            self._ping_anthropic(cfg)
         elif cfg.provider == "azure_openai":
             self._ping_azure(cfg)
         elif cfg.provider == "ollama":
             self._ping_ollama(cfg)
         else:
             raise ValueError(f"Unknown provider: {cfg.provider!r}")
+
+    # ── Tool-calling interface ────────────────────────────────────────────────
+
+    def call_with_tools(
+        self,
+        cfg: LLMConfig,
+        messages: list,
+        tools: list,
+    ) -> dict:
+        """
+        Call the LLM with tool/function definitions and return a structured
+        response indicating either a final text answer or tool call requests.
+
+        Args:
+            cfg:      LLM configuration (provider, model, api_key, etc.)
+            messages: Conversation history (system, user, assistant, tool).
+            tools:    Tool schemas in provider-native format.
+
+        Returns:
+            dict with keys:
+              - "content":    str — text response (may be empty if tool_calls)
+              - "tool_calls": list[dict] — each with "id", "name", "arguments"
+        """
+        if cfg.provider == "openai":
+            return self._call_openai_with_tools(cfg, messages, tools)
+        if cfg.provider == "anthropic":
+            return self._call_anthropic_with_tools(cfg, messages, tools)
+        if cfg.provider == "azure_openai":
+            return self._call_azure_with_tools(cfg, messages, tools)
+        if cfg.provider == "ollama":
+            return self._call_ollama_with_tools(cfg, messages, tools)
+        raise ValueError(f"Unknown LLM provider for tool calling: {cfg.provider!r}")
+
+    def _call_openai_with_tools(self, cfg, messages, tools) -> dict:
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise RuntimeError("openai package not installed. Run: pip install openai")
+
+        client = OpenAI(api_key=cfg.api_key)
+        kwargs = {
+            "model": cfg.model,
+            "messages": messages,
+            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
+            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+
+        completion = client.chat.completions.create(**kwargs)
+        msg = completion.choices[0].message
+
+        result: dict = {"content": msg.content or "", "tool_calls": []}
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                import json as _json
+                try:
+                    args = _json.loads(tc.function.arguments)
+                except (ValueError, TypeError):
+                    args = {}
+                result["tool_calls"].append({
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": args,
+                })
+        return result
+
+    def _call_azure_with_tools(self, cfg, messages, tools) -> dict:
+        try:
+            from openai import AzureOpenAI
+        except ImportError:
+            raise RuntimeError("openai package not installed. Run: pip install openai")
+
+        if not cfg.azure_endpoint:
+            raise ValueError("Azure endpoint URL is required.")
+
+        client = AzureOpenAI(
+            api_key=cfg.api_key,
+            azure_endpoint=cfg.azure_endpoint,
+            api_version=cfg.azure_api_version or "2024-02-01",
+        )
+        kwargs = {
+            "model": cfg.model,
+            "messages": messages,
+            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
+            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
+        }
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+
+        completion = client.chat.completions.create(**kwargs)
+        msg = completion.choices[0].message
+
+        result: dict = {"content": msg.content or "", "tool_calls": []}
+        if msg.tool_calls:
+            for tc in msg.tool_calls:
+                import json as _json
+                try:
+                    args = _json.loads(tc.function.arguments)
+                except (ValueError, TypeError):
+                    args = {}
+                result["tool_calls"].append({
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": args,
+                })
+        return result
+
+    def _call_anthropic_with_tools(self, cfg, messages, tools) -> dict:
+        import json as _json
+        import urllib.request
+
+        # Separate system message from conversation messages
+        system_text = ""
+        conv_messages = []
+        for m in messages:
+            if m["role"] == "system":
+                system_text = m["content"] if isinstance(m["content"], str) else str(m["content"])
+            else:
+                conv_messages.append(m)
+
+        payload: dict = {
+            "model": cfg.model,
+            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
+            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
+            "messages": conv_messages,
+        }
+        if system_text:
+            payload["system"] = system_text
+        if tools:
+            payload["tools"] = tools
+
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=_json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": cfg.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = _json.loads(resp.read().decode())
+
+        # Parse Anthropic response
+        content_text = ""
+        tool_calls = []
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                content_text += block.get("text", "")
+            elif block.get("type") == "tool_use":
+                tool_calls.append({
+                    "id": block.get("id", ""),
+                    "name": block.get("name", ""),
+                    "arguments": block.get("input", {}),
+                })
+
+        return {"content": content_text, "tool_calls": tool_calls}
+
+    def _call_ollama_with_tools(self, cfg, messages, tools) -> dict:
+        import json as _json
+        import urllib.request
+
+        base = (cfg.ollama_base_url or DEFAULT_OLLAMA_URL).rstrip("/")
+        url = f"{base}/api/chat"
+
+        payload: dict = {
+            "model": cfg.model,
+            "stream": False,
+            "options": {
+                "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
+                "num_predict": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
+            },
+            "messages": messages,
+        }
+        if tools:
+            # Ollama uses OpenAI-compatible tool format
+            payload["tools"] = tools
+
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = _json.loads(resp.read().decode())
+
+        msg = data.get("message", {})
+        content = msg.get("content", "")
+        tool_calls = []
+
+        for tc in msg.get("tool_calls", []):
+            fn = tc.get("function", {})
+            tool_calls.append({
+                "id": tc.get("id", f"call_{len(tool_calls)}"),
+                "name": fn.get("name", ""),
+                "arguments": fn.get("arguments", {}),
+            })
+
+        return {"content": content, "tool_calls": tool_calls}
+
+    # ── Anthropic (Claude) ───────────────────────────────────────────────────
+
+    def _call_anthropic(self, cfg: LLMConfig, user_message: str, system_prompt: str = SYSTEM_RAG) -> str:
+        """
+        Call the Anthropic Messages API via urllib (no extra dependency).
+        Supports Claude 3.5 Sonnet, Claude 3 Opus, etc.
+        """
+        import json
+        import urllib.request
+
+        payload = {
+            "model": cfg.model,
+            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
+            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": user_message},
+            ],
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": cfg.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode())
+
+        # Extract text from content blocks
+        text_parts = []
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text_parts.append(block.get("text", ""))
+        return "".join(text_parts)
+
+    def _ping_anthropic(self, cfg: LLMConfig) -> None:
+        """Validate Anthropic API key with a minimal request."""
+        import json
+        import urllib.request
+
+        payload = {
+            "model": cfg.model,
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "ping"}],
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": cfg.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                pass  # 200 = key is valid
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                raise RuntimeError("Invalid Anthropic API key.")
+            # Other errors (rate limit, etc.) still mean the key is working
+            if e.code >= 500:
+                raise
 
     # ── OpenAI ────────────────────────────────────────────────────────────────
 

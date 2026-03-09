@@ -29,10 +29,11 @@ from typing import Optional
 
 # ── Supported providers ────────────────────────────────────────────────────────
 
-PROVIDERS = ("openai", "azure_openai", "ollama")
+PROVIDERS = ("openai", "anthropic", "azure_openai", "ollama")
 
 DEFAULT_MODELS = {
     "openai":       "gpt-4o-mini",
+    "anthropic":    "claude-sonnet-4-20250514",
     "azure_openai": "gpt-4o-mini",
     "ollama":       "llama3",
 }

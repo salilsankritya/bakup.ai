@@ -107,17 +107,60 @@ def _response_to_dict(result) -> dict:
     }
 
 
+def _brain_to_query_response(brain_result) -> QueryResponse:
+    """Convert a BrainResponse into the API QueryResponse model."""
+    # Normalise mode — strip "fallback:" prefix for API compatibility
+    mode = brain_result.mode
+    if mode.startswith("fallback:"):
+        mode = mode[len("fallback:"):]
+
+    sources = []
+    for s in brain_result.sources:
+        if isinstance(s, dict):
+            sources.append(SourceModel(
+                file=s.get("file", ""),
+                line_start=s.get("line_start", 0),
+                line_end=s.get("line_end", 0),
+                excerpt=s.get("excerpt", ""),
+                confidence=s.get("confidence", 0.0),
+                confidence_label=s.get("confidence_label", "low"),
+                source_type=s.get("source_type", "code"),
+            ))
+        else:
+            sources.append(SourceModel(
+                file=s.file,
+                line_start=s.line_start,
+                line_end=s.line_end,
+                excerpt=s.excerpt,
+                confidence=s.confidence,
+                confidence_label=s.confidence_label,
+                source_type=s.source_type,
+            ))
+
+    return QueryResponse(
+        answer=brain_result.answer,
+        confidence=brain_result.confidence,
+        no_data=brain_result.no_data,
+        mode=mode,
+        sources=sources,
+        debug_trace=brain_result.reasoning_trace if brain_result.reasoning_trace else None,
+    )
+
+
 # ── Route: POST /ask ─────────────────────────────────────────────────────────
 
 @router.post("/ask", response_model=QueryResponse, tags=["query"])
 async def ask(body: QueryRequest) -> QueryResponse:
     """
-    Classify the question, then embed → retrieve → rank → answer.
+    Classify the question, then route through the brain controller.
+
+    The brain controller decides whether to use LLM-orchestrated tool
+    calling (when an LLM is configured) or the deterministic RAG pipeline.
 
     Classification happens first:
       - greeting  → immediate polite reply (no DB access)
       - off_topic → scope guard reply (no DB access)
-      - project   → full RAG pipeline
+      - project   → brain controller (LLM tools or fallback RAG)
 
     Set debug=true to include a step-by-step pipeline trace in the response.
     """
@@ -125,7 +168,6 @@ async def ask(body: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=400, detail="Question must not be empty.")
 
     # ── Hybrid Router ─────────────────────────────────────────────────────────
-    # Uses LLM classification when available, falls back to rule-based.
     from core.router.router import route_query, get_scope_message
 
     routing = route_query(
@@ -133,35 +175,33 @@ async def ask(body: QueryRequest) -> QueryResponse:
         namespace=body.namespace or "",
     )
 
-    # Conversational → short-circuit (no retrieval needed)
+    # Conversational → short-circuit via brain (no retrieval needed)
     if routing.intent == "conversational":
-        from core.retrieval.rag import answer_question as _answer
-        # The old classifier's GREETING vs CONVERSATIONAL distinction is
-        # preserved inside rag.answer_question via pre_classified.
-        # Use the regex classifier to pick the right sub-category.
         from core.classifier.query_classifier import classify_query, QueryCategory
         sub = classify_query(body.question)
         pre = sub.value if sub in (QueryCategory.GREETING, QueryCategory.CONVERSATIONAL) else "conversational"
-        result = _answer(
+
+        from core.brain.brain import process_query, store_debug_result
+        brain_result = process_query(
             question=body.question,
             namespace="_",
             top_k=1,
             debug=body.debug,
             pre_classified=pre,
         )
-        return _build_query_response(result)
+        return _brain_to_query_response(brain_result)
 
     # Unrelated → scope guard (no retrieval needed)
     if routing.intent == "unrelated":
-        from core.retrieval.rag import answer_question as _answer
-        result = _answer(
+        from core.brain.brain import process_query
+        brain_result = process_query(
             question=body.question,
             namespace="_",
             top_k=1,
             debug=body.debug,
             pre_classified="off_topic",
         )
-        return _build_query_response(result)
+        return _brain_to_query_response(brain_result)
 
     # ── Project questions require a valid namespace ───────────────────────────
     has_namespace = bool(body.namespace and body.namespace.strip())
@@ -170,7 +210,6 @@ async def ask(body: QueryRequest) -> QueryResponse:
 
     top_k = max(1, min(body.top_k, 20))
 
-    from core.retrieval.rag import answer_question
     from core.retrieval.vector_store import collection_count
 
     count = collection_count(body.namespace)
@@ -183,20 +222,44 @@ async def ask(body: QueryRequest) -> QueryResponse:
             ),
         )
 
+    # ── Get session context for follow-up support ─────────────────────────────
+    from core.retrieval.session import get_session
+    session = get_session(body.namespace)
+    session_context = ""
+    if session.is_follow_up(body.question) and session.turn_count > 0:
+        session_context = session.format_context()
+
     try:
-        # Force category to "project" so answer_question skips re-classification
-        # and goes straight to the RAG pipeline.
-        result = answer_question(
+        from core.brain.brain import process_query, store_debug_result
+
+        brain_result = process_query(
             question=body.question,
             namespace=body.namespace,
             top_k=top_k,
             debug=body.debug,
             pre_classified="project",
+            session_context=session_context,
         )
+
+        # Store for debug endpoint
+        store_debug_result(body.namespace, brain_result)
+
+        # Store turn in session memory for follow-up support
+        from core.retrieval.session import add_turn
+        source_files = list({s.get("file", "") for s in brain_result.sources[:10]})
+        add_turn(
+            body.namespace,
+            body.question,
+            brain_result.answer,
+            source_files=source_files,
+            question_type=brain_result.mode,
+            evidence_summary=f"{len(brain_result.tool_calls)} tool calls" if brain_result.tool_calls else "fallback pipeline",
+        )
+
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Query failed: {exc}")
 
-    return _build_query_response(result)
+    return _brain_to_query_response(brain_result)
 
 
 # ── Route: POST /ask/stream (SSE) ────────────────────────────────────────────

@@ -13,6 +13,7 @@ These endpoints help identify:
   - Session memory state
   - Error pattern clusters and causal confidence scoring
   - Time-based trend detection and spike alerts
+  - Brain controller state and tool call trace
 
 Endpoints:
   GET  /debug/index/{namespace}        — index diagnostics
@@ -26,6 +27,8 @@ Endpoints:
   POST /debug/causal-confidence        — full causal confidence analysis
   POST /debug/trends                   — time-based trend detection
   POST /debug/router                   — hybrid query router diagnostics
+  GET  /debug/brain                    — brain controller diagnostic state
+  GET  /debug/brain/{namespace}        — last brain result for a namespace
 """
 from __future__ import annotations
 
@@ -672,4 +675,93 @@ async def debug_router(body: dict) -> dict:
         "confidence_threshold": CONFIDENCE_THRESHOLD,
         "above_threshold": routing.confidence >= CONFIDENCE_THRESHOLD,
         "legacy_classifier": legacy_category.value,
+    }
+
+
+# ── Brain controller diagnostics ─────────────────────────────────────────────
+
+@router.get("/brain")
+async def debug_brain() -> dict:
+    """
+    Return the brain controller's current state.
+
+    Shows:
+      - LLM provider and model
+      - Whether tool calling is supported
+      - Available tools and their schemas
+      - Brain mode (active or fallback)
+      - Configuration (max_tool_calls, app_mode)
+    """
+    from core.llm.config_store import load_config, get_config_public
+    from core.brain.tools import TOOLS
+    from core.brain.brain import _provider_supports_tools, MAX_TOOL_CALLS
+
+    cfg = load_config()
+    public_cfg = get_config_public()
+
+    tools_supported = _provider_supports_tools(cfg.provider) if cfg.configured else False
+
+    import os
+    app_mode = os.environ.get("BAKUP_APP_MODE", "local")
+
+    return {
+        "llm_configured": cfg.configured,
+        "provider": public_cfg.get("provider", "none"),
+        "model": public_cfg.get("model", "none"),
+        "api_key_set": public_cfg.get("api_key_set", False),
+        "tools_supported": tools_supported,
+        "brain_mode": "active" if (cfg.configured and tools_supported) else "fallback",
+        "max_tool_calls": MAX_TOOL_CALLS,
+        "app_mode": app_mode,
+        "available_tools": [
+            {
+                "name": t.name,
+                "description": t.description,
+                "params": [
+                    {"name": p.name, "type": p.type, "required": p.required}
+                    for p in t.params
+                ],
+            }
+            for t in TOOLS
+        ],
+    }
+
+
+@router.get("/brain/{namespace}")
+async def debug_brain_namespace(namespace: str) -> dict:
+    """
+    Return the most recent brain result for a namespace.
+
+    Shows:
+      - Answer mode (brain, fallback, etc.)
+      - Tool calls made (names, arguments, timing)
+      - Reasoning trace (step-by-step)
+      - Provider and model used
+      - Total processing time
+    """
+    from core.brain.brain import get_debug_result
+
+    result = get_debug_result(namespace)
+    if not result:
+        return {
+            "namespace": namespace,
+            "has_result": False,
+            "message": "No brain result cached for this namespace. Run a query first.",
+        }
+
+    return {
+        "namespace": namespace,
+        "has_result": True,
+        "mode": result.mode,
+        "provider": result.provider,
+        "model": result.model,
+        "confidence": result.confidence,
+        "no_data": result.no_data,
+        "answer_length": len(result.answer),
+        "answer_preview": result.answer[:500],
+        "tool_calls": result.tool_calls,
+        "reasoning_trace": result.reasoning_trace,
+        "sources": result.sources[:5],
+        "total_ms": result.total_ms,
+        "error": result.error,
     }
