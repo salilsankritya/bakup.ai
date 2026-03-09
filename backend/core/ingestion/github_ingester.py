@@ -99,12 +99,31 @@ def ingest_github_repo(repo_url: str, branch: str = "HEAD", namespace: str = "")
 
         chunks = list(walk_project(Path(tmp_dir), namespace=namespace))
 
-        # Enrich chunks with repo metadata
+        # Enrich chunks with repo metadata (Chunk is frozen, rebuild with metadata)
+        enriched: list[Chunk] = []
         for chunk in chunks:
-            chunk.metadata = {**(chunk.metadata or {}), **repo_meta}
+            merged_meta = {**(chunk.metadata or {}), **repo_meta}
+            enriched.append(Chunk(
+                text=chunk.text,
+                source_file=chunk.source_file,
+                line_start=chunk.line_start,
+                line_end=chunk.line_end,
+                source_type=chunk.source_type,
+                file_name=chunk.file_name,
+                last_modified=chunk.last_modified,
+                detected_timestamp=chunk.detected_timestamp,
+                severity=chunk.severity,
+                language=chunk.language,
+                function_name=chunk.function_name,
+                class_name=chunk.class_name,
+                chunk_kind=chunk.chunk_kind,
+                docstring=chunk.docstring,
+                imports=chunk.imports,
+                metadata=merged_meta,
+            ))
 
-        print(f"bakup: {len(chunks)} chunks from {safe_url}")
-        return chunks
+        print(f"bakup: {len(enriched)} chunks from {safe_url}")
+        return enriched
 
     except git.exc.GitCommandError as exc:
         # Log the error without leaking credentials

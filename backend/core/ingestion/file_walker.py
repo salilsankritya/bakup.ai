@@ -148,24 +148,28 @@ def walk_project(project_root: Path, namespace: str = "") -> Iterator[Chunk]:
             relative = str(filepath.relative_to(root))
             file_chunk_count = 0
 
-            # Route log files through the log parser for per-entry chunking
-            if _is_log_file(filepath):
-                for chunk in parse_log_file(filepath, root):
-                    file_chunk_count += 1
-                    yield chunk
-            else:
-                # Use code-aware chunker for all code files
-                for chunk in chunk_file_code_aware(filepath, root, namespace=namespace):
-                    file_chunk_count += 1
-                    # Count code structures
-                    kind = getattr(chunk, 'chunk_kind', '')
-                    if kind == 'function':
-                        functions_detected += 1
-                    elif kind == 'class':
-                        classes_detected += 1
-                    elif kind == 'method':
-                        methods_detected += 1
-                    yield chunk
+            try:
+                # Route log files through the log parser for per-entry chunking
+                if _is_log_file(filepath):
+                    for chunk in parse_log_file(filepath, root):
+                        file_chunk_count += 1
+                        yield chunk
+                else:
+                    # Use code-aware chunker for all code files
+                    for chunk in chunk_file_code_aware(filepath, root, namespace=namespace):
+                        file_chunk_count += 1
+                        # Count code structures
+                        kind = getattr(chunk, 'chunk_kind', '')
+                        if kind == 'function':
+                            functions_detected += 1
+                        elif kind == 'class':
+                            classes_detected += 1
+                        elif kind == 'method':
+                            methods_detected += 1
+                        yield chunk
+            except Exception as exc:
+                logger.warning("Skipping file %s: %s", relative, exc)
+                continue
 
             chunks_per_file[relative] = file_chunk_count
             total_chunks += file_chunk_count

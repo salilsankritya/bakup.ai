@@ -166,14 +166,27 @@ def _run_local_ingestion(path: str, log_path: Optional[str], namespace: str) -> 
     logger.info("Walk complete: %d chunk(s) from source files", len(chunks))
 
     if log_path:
-        log_file = Path(log_path).resolve()
-        logger.info("Log file path (resolved): %s", log_file)
-        if log_file.is_file():
-            log_chunks = parse_log_file(log_file, project_root)
-            logger.info("Log parser: %d chunk(s) from %s", len(log_chunks), log_file.name)
+        log_target = Path(log_path).resolve()
+        logger.info("Log path (resolved): %s", log_target)
+        if log_target.is_file():
+            log_chunks = parse_log_file(log_target, project_root)
+            logger.info("Log parser: %d chunk(s) from %s", len(log_chunks), log_target.name)
             chunks.extend(log_chunks)
+        elif log_target.is_dir():
+            # Recursively parse all log files in the directory
+            log_file_count = 0
+            for log_file in sorted(log_target.rglob("*")):
+                if log_file.is_file() and log_file.suffix.lower() in {".log", ".out", ".txt", ".err"}:
+                    try:
+                        lc = parse_log_file(log_file, project_root)
+                        chunks.extend(lc)
+                        log_file_count += 1
+                        logger.info("Log parser: %d chunk(s) from %s", len(lc), log_file.name)
+                    except Exception as exc:
+                        logger.warning("Skipping log file %s: %s", log_file.name, exc)
+            logger.info("Log folder: %d files parsed under %s", log_file_count, log_target)
         else:
-            logger.warning("Log file does not exist or is not a file: %s", log_file)
+            logger.warning("Log path does not exist: %s", log_target)
 
     if not chunks:
         logger.warning("No chunks produced from %s", project_root)
@@ -272,10 +285,14 @@ async def index_local(body: IndexLocalRequest) -> IndexResponse:
     # ── Normalize and validate project path ──────────────────────────────
     resolved_path = _validate_path(body.path, kind="directory")
 
-    # ── Normalize and validate optional log file path ────────────────────
+    # ── Normalize and validate optional log path (file or directory) ────
     resolved_log: Optional[str] = None
     if body.log_path and body.log_path.strip():
-        resolved_log = _validate_path(body.log_path, kind="file")
+        raw_log = _normalize_path(body.log_path)
+        if os.path.isdir(raw_log):
+            resolved_log = _validate_path(body.log_path, kind="directory")
+        else:
+            resolved_log = _validate_path(body.log_path, kind="file")
 
     namespace = body.namespace or _derive_namespace(resolved_path)
 
@@ -326,6 +343,7 @@ async def index_github(body: IndexGitHubRequest) -> IndexResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
+        logger.exception("GitHub ingestion failed for %s", body.repo_url)
         raise HTTPException(status_code=500, detail=f"GitHub ingestion failed: {exc}")
 
     if stored == 0:

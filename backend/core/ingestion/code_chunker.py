@@ -187,8 +187,12 @@ def chunk_file_code_aware(
     relative = str(filepath.relative_to(project_root))
     language = detect_language(filepath)
 
-    # Parse with language-specific parser
-    units = parse_file(text, language)
+    # Parse with language-specific parser (safe — never crash on bad input)
+    try:
+        units = parse_file(text, language)
+    except Exception as exc:
+        logger.debug("Code parser failed for %s: %s — falling back to line-window", relative, exc)
+        units = []
 
     if units:
         chunks = code_units_to_chunks(units, relative)
