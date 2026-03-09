@@ -221,4 +221,17 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 
 ---
 
-*Last updated: v10 Security & Reliability Hardening*
+## Demo Readiness (v11)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Version bump to 0.2.0 | ✅ | health.py, main.py, bakup_server.py, bakup-installer.iss all report 0.2.0 |
+| Anthropic in LLM modal | ✅ | Claude provider added to UI dropdown with default model and placeholder |
+| Landing page How It Works | ✅ | Terminal examples replaced with browser-based workflow (no CLI references) |
+| Landing page changelog | ✅ | v0.2.1 security & demo hardening entry added |
+| Cross-machine audit | ✅ | No hardcoded user paths found; all paths use `%~dp0` / `sys.executable` |
+| Error handling audit | ✅ | All user-facing errors are caught; no stack traces leak; SSE has fallback |
+
+---
+
+*Last updated: v11 Demo Readiness Audit*

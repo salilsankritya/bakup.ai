@@ -1,6 +1,6 @@
 # bakup.ai — AI Context File
 
-> **Last updated:** 2026-03-08
+> **Last updated:** 2026-03-10
 > **Purpose:** Provides a complete snapshot of the project for any AI assistant to resume work without loss of context.
 
 ---
@@ -404,6 +404,16 @@ chardet==5.2.0
   - **Brain debug cache**: Bounded to 50 entries with FIFO eviction (no more unbounded growth).
   - **File walker hardening**: SKIP_DIRS extended to 23 entries (added coverage, .tox, .nox, .cache, .eggs, __pypackages__, .coverage).
   - **Graceful degradation**: SSE pipeline errors logged server-side and return generic error to client.
+
+### v11: Demo Readiness Audit (commit pending)
+
+  - **Version bump**: 0.1.0 → 0.2.0 in health.py, main.py, bakup_server.py, bakup-installer.iss
+  - **Anthropic in UI**: Claude added to LLM provider dropdown with `claude-sonnet-4-20250514` default and `sk-ant-…` placeholder
+  - **Landing page fixed**: "How it works" terminal examples replaced with browser-based workflow (no CLI references)
+  - **Landing page changelog**: v0.2.1 security & demo hardening entry added
+  - **Cross-machine audit**: Confirmed no hardcoded user paths; all paths use `%~dp0` (bat), `sys.executable` (Python), Inno variables
+  - **UI welcome text**: Added "No data leaves your machine" to welcome state
+  - **FEATURES.md**: v11 demo readiness section added
 
 ---
 

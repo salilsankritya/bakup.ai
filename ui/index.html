@@ -110,7 +110,7 @@
           </svg>
         </div>
         <h2 class="welcome-title">Ask anything about your project</h2>
-        <p class="welcome-sub">Index a codebase or log folder, then ask questions. Bakup ingests files recursively, clusters error patterns, detects spikes and regressions, and delivers root-cause analysis with causal confidence scoring.</p>
+        <p class="welcome-sub">Index a codebase or log folder, then ask questions in plain English. Bakup ingests files recursively, clusters error patterns, detects spikes and regressions, and delivers root-cause analysis with causal confidence scoring. No data leaves your machine.</p>
         <div class="welcome-chips">
           <button class="chip" data-q="What errors appear across all log files?">What errors appear across all log files?</button>
           <button class="chip" data-q="Why is the application failing?">Why is the application failing?</button>
@@ -288,6 +288,7 @@
         <label class="form-label" for="llm-provider">Provider</label>
         <select class="form-input" id="llm-provider">
           <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic (Claude)</option>
           <option value="azure_openai">Azure OpenAI</option>
           <option value="ollama">Ollama (local, no key needed)</option>
         </select>

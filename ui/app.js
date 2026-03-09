@@ -13,7 +13,7 @@ const API_BASE       = ['3000','5500'].includes(location.port)
                        ? `${location.protocol}//${location.hostname}:8000`
                        : '';
 const HEALTH_POLL_MS = 15_000;
-const DEFAULT_MODELS = { openai: 'gpt-4o-mini', azure_openai: 'gpt-4o-mini', ollama: 'llama3' };
+const DEFAULT_MODELS = { openai: 'gpt-4o-mini', anthropic: 'claude-sonnet-4-20250514', azure_openai: 'gpt-4o-mini', ollama: 'llama3' };
 const LS_SESSIONS    = 'bakup_sessions_v2';
 const LS_ACTIVE      = 'bakup_active_session_v2';
 
@@ -972,6 +972,8 @@ function syncProviderFields() {
   llmKeyGroup.hidden    = (p === 'ollama');
   llmAzureGroup.hidden  = (p !== 'azure_openai');
   llmOllamaGroup.hidden = (p !== 'ollama');
+  // Update API key placeholder per provider
+  llmApiKey.placeholder = p === 'anthropic' ? 'sk-ant-…' : 'sk-…';
 }
 
 function clearTestResult() {

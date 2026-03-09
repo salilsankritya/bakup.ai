@@ -59,14 +59,14 @@
           <span class="step__num">01</span>
           <h3 class="step__title">Point it at your project</h3>
           <p class="step__body">
-            Provide a local path to your codebase and log folder. Bakup
-            recursively scans source files and log directories in read-only
-            mode — tagging each entry by severity. Nothing is indexed remotely.
-            Nothing leaves disk.
+            Open the browser UI and provide a local path to your codebase and
+            log folder. Bakup recursively scans source files and log directories
+            in read-only mode — tagging each entry by severity. Nothing is
+            indexed remotely. Nothing leaves disk.
           </p>
-          <div class="terminal" aria-label="Terminal example">
-            <span class="terminal__prompt">$</span>
-            <span class="terminal__cmd">bakup index --path /your/project --logs /your/project/logs</span>
+          <div class="terminal" aria-label="UI example">
+            <span class="terminal__prompt">&gt;</span>
+            <span class="terminal__cmd">Index Project → C:\projects\my-service</span>
           </div>
         </div>
 
@@ -79,9 +79,9 @@
             stack traces, resolves dependencies, and correlates errors with source
             code — all automatically.
           </p>
-          <div class="terminal" aria-label="Terminal example">
-            <span class="terminal__prompt">$</span>
-            <span class="terminal__cmd">bakup ask "What's causing the connection timeouts?"</span>
+          <div class="terminal" aria-label="UI example">
+            <span class="terminal__prompt">&gt;</span>
+            <span class="terminal__cmd">"What's causing the connection timeouts?"</span>
           </div>
         </div>
 
@@ -367,6 +367,20 @@ http://127.0.0.1:8000</code></pre>
   <section class="section" id="changelog">
     <div class="container container--narrow">
       <h2 class="section__title">Changelog</h2>
+
+      <div class="changelog__entry">
+        <h3 class="changelog__version">v0.2.1 <span class="changelog__date">— March 2026 · Security & Demo Hardening</span></h3>
+        <ul class="changelog__list">
+          <li>Path traversal protection — filename sanitisation and directory confinement on all upload endpoints.</li>
+          <li>Debug endpoint authentication — all <code>/debug/*</code> routes require an access key header.</li>
+          <li>Namespace and input validation — regex enforcement and question length limits.</li>
+          <li>Error message redaction — server paths and stack traces are never leaked to the client.</li>
+          <li>LLM context limits — configurable caps on evidence chunks to prevent prompt overflow.</li>
+          <li>Brain debug cache bounded — LRU eviction prevents unbounded memory growth.</li>
+          <li>Anthropic (Claude) added to the LLM provider selector.</li>
+          <li>Version bumped to 0.2.0 across health endpoint, installer, and server binary.</li>
+        </ul>
+      </div>
 
       <div class="changelog__entry">
         <h3 class="changelog__version">v0.2.0 <span class="changelog__date">— March 2026 · Reasoning Engine</span></h3>

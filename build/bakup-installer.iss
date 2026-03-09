@@ -10,7 +10,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define MyAppName "bakup.ai"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "bakup.ai"
 #define MyAppURL "https://github.com/salilsankritya/bakup.ai"
 #define MyAppExeName "bakup-launcher.bat"
