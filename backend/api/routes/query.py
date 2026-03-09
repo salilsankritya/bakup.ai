@@ -21,12 +21,31 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from functools import partial
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
+
+logger = logging.getLogger("bakup.query")
+
+
+# ── Input validation ──────────────────────────────────────────────────────────
+
+import re
+
+_NAMESPACE_RE = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
+
+
+def _validate_namespace(ns: str) -> None:
+    """Reject namespaces with unexpected characters (injection guard)."""
+    if not ns or not _NAMESPACE_RE.match(ns):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid namespace format. Expected 1-100 alphanumeric/dash/underscore characters.",
+        )
 
 router = APIRouter()
 
@@ -34,8 +53,8 @@ router = APIRouter()
 # ── Request / response models ─────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
-    question: str
-    namespace: str          # Must match the namespace used during /index
+    question: str = Field(..., max_length=10000)
+    namespace: str = Field(..., min_length=1, max_length=100)  # Must match the namespace used during /index
     top_k: int = 8          # Number of candidates to retrieve (1–20)
     debug: bool = False     # When true, include step-by-step pipeline trace
 
@@ -208,6 +227,8 @@ async def ask(body: QueryRequest) -> QueryResponse:
     if not has_namespace:
         raise HTTPException(status_code=400, detail="Namespace must not be empty. Use the namespace returned by /index.")
 
+    _validate_namespace(body.namespace)
+
     top_k = max(1, min(body.top_k, 20))
 
     from core.retrieval.vector_store import collection_count
@@ -257,7 +278,8 @@ async def ask(body: QueryRequest) -> QueryResponse:
         )
 
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Query failed: {exc}")
+        logger.error("Query failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Query processing failed. Check server logs.")
 
     return _brain_to_query_response(brain_result)
 
@@ -625,7 +647,9 @@ async def ask_stream(body: QueryRequest):
             yield sse_result(_response_to_dict(result))
 
         except Exception as exc:
-            yield sse_result({"error": str(exc)})
+            import traceback
+            logger.error("SSE stream error: %s", traceback.format_exc())
+            yield sse_result({"error": "An internal error occurred. Check server logs."})
 
     return StreamingResponse(
         event_generator(),

@@ -94,7 +94,7 @@ def _validate_path(raw: str, *, kind: str = "directory") -> str:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Invalid path. The {kind} does not exist: {resolved}\n"
+                f"Invalid path. The {kind} does not exist.\n"
                 "Ensure the full absolute path is provided and the "
                 f"{kind} is accessible by the application."
             ),
@@ -105,7 +105,7 @@ def _validate_path(raw: str, *, kind: str = "directory") -> str:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Path is not a directory: {resolved}\n"
+                "Path is not a directory.\n"
                 "Please provide the path to a project folder, not a single file."
             ),
         )
@@ -113,7 +113,7 @@ def _validate_path(raw: str, *, kind: str = "directory") -> str:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Path is not a file: {resolved}\n"
+                "Path is not a file.\n"
                 "Please provide the path to a log file."
             ),
         )
@@ -125,13 +125,10 @@ def _validate_path(raw: str, *, kind: str = "directory") -> str:
             for vol in _DOCKER_VOLUMES
         )
         if not inside:
-            allowed = ", ".join(_DOCKER_VOLUMES)
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Path is outside the allowed mounted volumes.\n"
-                    f"Allowed: {allowed}\n"
-                    f"Received: {resolved}\n"
+                    "Path is outside the allowed mounted volumes.\n"
                     "When running inside Docker, place your project files "
                     "inside the mounted directory and reference the container path."
                 ),
@@ -364,6 +361,22 @@ def _safe_suffix(filename: str) -> bool:
     return p.suffix.lower() not in {".exe", ".dll", ".so", ".zip", ".tar", ".gz", ".7z", ".bin"}
 
 
+def _sanitize_filename(raw: str) -> str:
+    """
+    Strip directory traversal components from an uploaded filename.
+
+    Takes only the final component (e.g. '../../evil.py' → 'evil.py'),
+    rejects empty or hidden names, and normalises separators.
+    """
+    # Use PurePosixPath to handle both / and \ separators
+    from pathlib import PurePosixPath
+    name = PurePosixPath(raw.replace("\\", "/")).name
+    # Reject empty, dot-only, or hidden filenames
+    if not name or name.startswith(".") or name in (".", ".."):
+        name = "unnamed"
+    return name
+
+
 def _run_upload_ingestion(
     project_files: List[tuple[str, bytes]],
     log_files: List[tuple[str, bytes]],
@@ -385,15 +398,26 @@ def _run_upload_ingestion(
         src_dir.mkdir()
         logs_dir.mkdir()
 
-        # Write project files
+        # Write project files (filenames already sanitised)
         for name, content in project_files:
-            dest = src_dir / name
+            dest = (src_dir / name).resolve()
+            # Confinement check — dest must stay inside src_dir
+            try:
+                dest.relative_to(src_dir.resolve())
+            except ValueError:
+                logger.warning("Upload path escape blocked: %s", name)
+                continue
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(content)
 
-        # Write log files
+        # Write log files (filenames already sanitised)
         for name, content in log_files:
-            dest = logs_dir / name
+            dest = (logs_dir / name).resolve()
+            try:
+                dest.relative_to(logs_dir.resolve())
+            except ValueError:
+                logger.warning("Upload path escape blocked: %s", name)
+                continue
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(content)
 
@@ -441,18 +465,20 @@ async def index_upload(
     log_data: List[tuple[str, bytes]] = []
 
     for f in project_files:
-        if not _safe_suffix(f.filename or "unnamed"):
+        safe_name = _sanitize_filename(f.filename or "unnamed")
+        if not _safe_suffix(safe_name):
             continue
         content = await f.read()
         if len(content) > _MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File too large: {f.filename} ({len(content)} bytes)")
-        proj_data.append((f.filename or "unnamed", content))
+            raise HTTPException(status_code=413, detail=f"File too large ({len(content)} bytes, max {_MAX_UPLOAD_SIZE}).")
+        proj_data.append((safe_name, content))
 
     for f in log_files:
+        safe_name = _sanitize_filename(f.filename or "unnamed.log")
         content = await f.read()
         if len(content) > _MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail=f"File too large: {f.filename} ({len(content)} bytes)")
-        log_data.append((f.filename or "unnamed.log", content))
+            raise HTTPException(status_code=413, detail=f"File too large ({len(content)} bytes, max {_MAX_UPLOAD_SIZE}).")
+        log_data.append((safe_name, content))
 
     label = project_name or "upload"
     ns = namespace or _derive_namespace(f"upload:{label}:{len(proj_data)}:{len(log_data)}")
@@ -460,7 +486,8 @@ async def index_upload(
     try:
         stored = _run_upload_ingestion(proj_data, log_data, ns)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Upload ingestion failed: {exc}")
+        logger.error("Upload ingestion failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Upload ingestion failed. Check server logs for details.")
 
     total_files = len(proj_data) + len(log_data)
     return IndexResponse(

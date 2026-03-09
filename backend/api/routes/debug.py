@@ -32,13 +32,33 @@ Endpoints:
 """
 from __future__ import annotations
 
+import os
 import time
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/debug", tags=["debug"])
+
+# ── Debug access guard ────────────────────────────────────────────────────────
+
+def _require_debug_access(x_access_key: Optional[str] = Header(default=None)) -> None:
+    """
+    Guard debug endpoints behind the access key.
+
+    Debug endpoints can be disabled entirely by setting
+    BAKUP_DEBUG_ENABLED=false in the environment.
+    The access key is checked via the X-Access-Key header.
+    """
+    if os.environ.get("BAKUP_DEBUG_ENABLED", "true").lower() == "false":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    expected = os.environ.get("BAKUP_ACCESS_KEY", "").strip()
+    if expected and x_access_key != expected:
+        raise HTTPException(status_code=403, detail="Debug access denied. Provide X-Access-Key header.")
+
+
+router = APIRouter(prefix="/debug", tags=["debug"], dependencies=[Depends(_require_debug_access)])
 
 
 # ── Response models ────────────────────────────────────────────────────────────

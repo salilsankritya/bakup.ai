@@ -307,6 +307,10 @@ def _run_tool_loop(
 
             _trace_step("answer", f"Final answer received ({len(answer)} chars)")
 
+            # Context size reporting for observability
+            total_context_chars = sum(len(json.dumps(m.get("content", ""), default=str)) for m in messages)
+            _trace_step("context_size", f"Total LLM context: {total_context_chars} chars across {len(messages)} messages")
+
             total_ms = round((time.perf_counter() - t0) * 1000, 1)
 
             return BrainResponse(
@@ -554,12 +558,18 @@ def _summarise_result(result: dict) -> str:
 
 # ── Debug / introspection ────────────────────────────────────────────────────
 
-# In-memory store for the most recent brain invocation (per namespace)
+# In-memory store for the most recent brain invocation (per namespace).
+# Bounded to prevent unbounded memory growth.
+_MAX_DEBUG_CACHE = 50
 _last_brain_result: Dict[str, BrainResponse] = {}
 
 
 def store_debug_result(namespace: str, result: BrainResponse) -> None:
-    """Store the most recent brain result for debug inspection."""
+    """Store the most recent brain result for debug inspection (LRU-evicted)."""
+    # Evict oldest entries if cache is full
+    while len(_last_brain_result) >= _MAX_DEBUG_CACHE:
+        oldest = next(iter(_last_brain_result))
+        del _last_brain_result[oldest]
     _last_brain_result[namespace] = result
 
 

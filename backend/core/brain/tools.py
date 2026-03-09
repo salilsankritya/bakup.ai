@@ -106,11 +106,13 @@ def _search_logs(query: str, namespace: str, top_k: int = 8) -> dict:
 
     Returns log entries ranked by relevance with trend/cluster analysis.
     """
+    from config import settings
     from core.retrieval.agent import _execute_search_logs, StructuredEvidence
 
     evidence = StructuredEvidence()
     _execute_search_logs(query, namespace, top_k, evidence)
 
+    max_logs = settings.max_evidence_logs if settings else 5
     return {
         "logs_found": len(evidence.logs),
         "code_found": len(evidence.code),
@@ -121,7 +123,7 @@ def _search_logs(query: str, namespace: str, top_k: int = 8) -> dict:
                 "confidence": round(c.confidence, 3),
                 "text": c.text[:600],
             }
-            for c in evidence.logs[:8]
+            for c in evidence.logs[:max_logs]
         ],
         "trend_summary": evidence.trend_summary or "",
         "cluster_summary": evidence.cluster_summary or "",
@@ -138,11 +140,13 @@ def _search_code(query: str, namespace: str, top_k: int = 8) -> dict:
 
     Returns code chunks ranked by relevance with function/class metadata.
     """
+    from config import settings
     from core.retrieval.agent import _execute_search_code, StructuredEvidence
 
     evidence = StructuredEvidence()
     _execute_search_code(query, namespace, top_k, evidence)
 
+    max_code = settings.max_evidence_code if settings else 5
     return {
         "code_found": len(evidence.code),
         "code_chunks": [
@@ -154,7 +158,7 @@ def _search_code(query: str, namespace: str, top_k: int = 8) -> dict:
                 "class": getattr(c, "class_name", "") or "",
                 "text": c.text[:800],
             }
-            for c in evidence.code[:8]
+            for c in evidence.code[:max_code]
         ],
     }
 
@@ -216,9 +220,12 @@ def _get_error_clusters(namespace: str) -> dict:
     Returns error pattern clusters with occurrence counts, trends,
     and causal confidence scoring.
     """
+    from config import settings
     from core.embeddings.embedder import embed_query
     from core.retrieval.vector_store import severity_search
     from core.retrieval.ranker import rank_results
+
+    max_clusters = settings.max_evidence_clusters if settings else 3
 
     # Pull error-severity log chunks
     sev_chunks = severity_search(namespace, severity="error", top_k=30)
@@ -230,7 +237,11 @@ def _get_error_clusters(namespace: str) -> dict:
     try:
         from core.analysis.error_clustering import cluster_error_patterns
         ecr = cluster_error_patterns(ranked)
-        return ecr.to_dict()
+        result = ecr.to_dict()
+        # Apply cluster limit
+        if "clusters" in result and len(result["clusters"]) > max_clusters:
+            result["clusters"] = result["clusters"][:max_clusters]
+        return result
     except Exception as exc:
         return {"clusters": [], "total_errors": len(ranked), "error": str(exc)}
 

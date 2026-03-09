@@ -1,6 +1,6 @@
 # bakup.ai — AI Context File
 
-> **Last updated:** 2026-03-07
+> **Last updated:** 2026-03-08
 > **Purpose:** Provides a complete snapshot of the project for any AI assistant to resume work without loss of context.
 
 ---
@@ -78,7 +78,7 @@ bakup.ai/
 │
 ├── backend/                ← Python backend
 │   ├── main.py             ← 93 lines — FastAPI app entry point
-│   ├── config.py           ← 87 lines — env-based settings
+│   ├── config.py           ← 120 lines — env-based settings (incl. evidence limits)
 │   ├── Dockerfile          ← 30 lines — container build
 │   ├── requirements.txt    ← pinned dependencies
 │   │
@@ -164,6 +164,10 @@ bakup.ai/
 | LLM Temperature | 0.1 | `BAKUP_LLM_TEMPERATURE` env var |
 | Router Confidence Threshold | 0.60 | Below this → falls back to project_query |
 | Max Tool Calls | 5 | `BAKUP_MAX_TOOL_CALLS` — brain tool budget per query |
+| Max Evidence Logs | 5 | `BAKUP_MAX_EVIDENCE_LOGS` — log chunks per tool call |
+| Max Evidence Code | 5 | `BAKUP_MAX_EVIDENCE_CODE` — code chunks per tool call |
+| Max Evidence Clusters | 3 | `BAKUP_MAX_EVIDENCE_CLUSTERS` — error clusters per tool call |
+| Max Question Length | 10000 | `BAKUP_MAX_QUESTION_LENGTH` — chars |
 | App Mode | local | `BAKUP_APP_MODE` — local or cloud |
 | LLM Context Results | 10 | Max chunks sent to LLM per query |
 | Max Chunk Chars | 1200 | Per-chunk character limit in LLM context |
@@ -391,6 +395,15 @@ chardet==5.2.0
 - **Reasoning Engine v5**: All question types now receive the full evidence context (logs + code + deps + architecture + cross-analysis). No evidence is discarded at the last mile. The response quality gate ensures LLM output is complete. Token budget of 2048 allows deep multi-section analysis.
 - **Hybrid Router v6**: Query routing uses LLM classification when available, with rule-based fallback. Conversational/unrelated queries are always short-circuited. Ingestion now excludes model-weights, vectordb, and binary files. Retrieval guard prevents low-confidence extractive matches from being surfaced.
 - **Brain Architecture v9**: `/ask` route now goes through `brain.process_query()`. When an LLM with tool-calling support is configured, the brain orchestrates 8 tools (search_logs, search_code, retrieve_dependencies, get_architecture_summary, get_error_clusters, get_file_context, query_symbol_graph, cross_analyse) in an iterative loop (max 5 calls per query). Falls back to the deterministic planner→agent pipeline when no LLM is configured. Anthropic Claude added as a new provider alongside OpenAI/Azure/Ollama. Cloud mode config (`BAKUP_APP_MODE=local|cloud`) added. Debug endpoints: `GET /debug/brain` and `GET /debug/brain/{ns}`.
+- **Security & Reliability Hardening v10**:
+  - **Path traversal protection**: Upload filenames sanitised via `_sanitize_filename()` (strips `../` etc.) with `resolve().relative_to()` confinement check. Error messages no longer expose resolved server paths.
+  - **LLM context window control**: Configurable evidence limits (`max_evidence_logs=5`, `max_evidence_code=5`, `max_evidence_clusters=3`) applied in brain tools. Quality gate retry budget capped at 16K tokens.
+  - **Namespace isolation**: Regex validation (`^[a-zA-Z0-9_-]{1,100}$`) on namespace parameter. Question field limited to 10,000 chars via Pydantic.
+  - **Debug endpoint auth**: All `/debug/*` endpoints now require `X-Access-Key` header. Can be disabled with `BAKUP_DEBUG_ENABLED=false`.
+  - **SSE error sanitisation**: Stream errors return generic message instead of leaking exception details.
+  - **Brain debug cache**: Bounded to 50 entries with FIFO eviction (no more unbounded growth).
+  - **File walker hardening**: SKIP_DIRS extended to 23 entries (added coverage, .tox, .nox, .cache, .eggs, __pypackages__, .coverage).
+  - **Graceful degradation**: SSE pipeline errors logged server-side and return generic error to client.
 
 ---
 

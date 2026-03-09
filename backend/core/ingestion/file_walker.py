@@ -41,6 +41,11 @@ SKIP_DIRS: frozenset = frozenset({
     ".idea", ".vscode",
     "model-weights",       # embedding model binaries — never index
     "vectordb",            # ChromaDB persistence — never index
+    "coverage", ".coverage",  # test coverage artefacts
+    ".tox", ".nox",           # test automation
+    ".cache",                 # generic caches (pip, etc.)
+    "__pypackages__",         # PEP 582 local packages
+    ".eggs",                  # setuptools build artefacts
 })
 
 # File extensions to always skip (binary / model weights)

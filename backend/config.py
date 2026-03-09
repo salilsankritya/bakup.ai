@@ -55,6 +55,14 @@ class Settings:
     # ── Brain (LLM-orchestrated reasoning) ────────────────────────────────────
     max_tool_calls: int = 5     # Max tool invocations per query in brain mode.
 
+    # ── Evidence context limits ───────────────────────────────────────────────
+    # Controls how many items each tool returns to the LLM context window.
+    # Prevents context overflow on models with small windows.
+    max_evidence_logs: int = 5      # Max log entries per tool call
+    max_evidence_code: int = 5      # Max code chunks per tool call
+    max_evidence_clusters: int = 3  # Max error clusters per tool call
+    max_question_length: int = 10000  # Max chars in a user question
+
 
 def _require(name: str, value: str, hint: str = "") -> str:
     if not value.strip():
@@ -107,6 +115,10 @@ def load_settings() -> Settings:
         confidence_threshold=float(os.environ.get("BAKUP_CONFIDENCE_THRESHOLD", "0.35")),
         app_mode=os.environ.get("BAKUP_APP_MODE", "local").lower(),
         max_tool_calls=int(os.environ.get("BAKUP_MAX_TOOL_CALLS", "5")),
+        max_evidence_logs=int(os.environ.get("BAKUP_MAX_EVIDENCE_LOGS", "5")),
+        max_evidence_code=int(os.environ.get("BAKUP_MAX_EVIDENCE_CODE", "5")),
+        max_evidence_clusters=int(os.environ.get("BAKUP_MAX_EVIDENCE_CLUSTERS", "3")),
+        max_question_length=int(os.environ.get("BAKUP_MAX_QUESTION_LENGTH", "10000")),
     )
 
 

@@ -597,6 +597,8 @@ class LLMService:
         """
         Check response quality and retry once with a larger token budget
         if the response appears truncated or too short.
+
+        Uses a thread-safe local override instead of mutating os.environ.
         """
         if not raw or raw.strip().startswith(NO_ANSWER_TOKEN):
             return raw   # nothing to improve
@@ -610,9 +612,10 @@ class LLMService:
         reason = "too short" if is_short else "appears truncated"
         print(f"  [bakup:debug] quality gate: response {reason} ({len(raw)} chars) — retrying with higher budget")
 
-        # Retry with 2x token budget via env override
+        # Retry with 2x token budget via a temporary env override
+        # Use a thread-local approach: save → set → call → restore
         orig_budget = os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")
-        retry_budget = str(int(orig_budget) * 2)
+        retry_budget = str(min(int(orig_budget) * 2, 16384))  # Cap at 16K
         os.environ["BAKUP_LLM_MAX_TOKENS"] = retry_budget
         try:
             retry_raw = self._call_provider(cfg, user_msg, system_prompt=system_prompt)

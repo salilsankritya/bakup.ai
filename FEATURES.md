@@ -167,6 +167,16 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 | HEAD support for /download | ✅ | CDN probes and link checkers handled correctly |
 | No UPX packing | ✅ | Avoids AV false positives from packed binaries |
 | Version info embedded | ✅ | Binary has CompanyName, FileDescription metadata |
+| **Upload path traversal protection** | ✅ | Filenames sanitized with `_sanitize_filename()` + `resolve().relative_to()` confinement check |
+| **Server path redaction** | ✅ | Error messages never expose resolved file paths to clients |
+| **Namespace format validation** | ✅ | Regex-validated `^[a-zA-Z0-9_-]{1,100}$` — prevents injection |
+| **Question length limit** | ✅ | Max 10,000 chars enforced via Pydantic `Field(max_length=10000)` |
+| **Debug endpoint auth** | ✅ | All `/debug/*` endpoints require `X-Access-Key` header; can be disabled via `BAKUP_DEBUG_ENABLED=false` |
+| **SSE error sanitization** | ✅ | SSE stream errors never leak internal exception messages |
+| **LLM context window caps** | ✅ | Configurable `max_evidence_logs=5`, `max_evidence_code=5`, `max_evidence_clusters=3` |
+| **Brain debug cache LRU** | ✅ | Debug cache bounded to 50 entries with FIFO eviction |
+| **File walker safety** | ✅ | 23 skip-dirs including coverage, .tox, .cache, .eggs, __pypackages__ |
+| **Quality gate token cap** | ✅ | Retry budget capped at 16K tokens to prevent runaway costs |
 
 ---
 
@@ -211,4 +221,4 @@ Comprehensive list of all implemented features in bakup.ai — the AI-powered pr
 
 ---
 
-*Last updated: v9 Brain Architecture — LLM-orchestrated tool-calling + Anthropic provider*
+*Last updated: v10 Security & Reliability Hardening*
