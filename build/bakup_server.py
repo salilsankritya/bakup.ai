@@ -50,34 +50,143 @@ if getattr(sys, 'frozen', False):
 else:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
-# ── Torch CUDA stub ───────────────────────────────────────────────────────────
-# The PyInstaller build excludes torch.cuda (GPU not needed for CPU inference).
-# sentence-transformers / torch still try to import it at init time, which would
-# crash with "No module named 'torch.cuda'". Inject a lightweight stub so the
-# import succeeds and torch gracefully falls back to CPU-only mode.
-import importlib, types
+# ── Torch GPU stub (MetaPathFinder) ───────────────────────────────────────────
+# The PyInstaller build excludes torch.cuda / xpu / mps / mtia to save ~700 MB.
+# torch.__init__.py internally does `from torch import cuda`, so the stubs MUST
+# be registered in sys.modules BEFORE `import torch` runs.  A MetaPathFinder
+# intercepts any import under the excluded roots and returns a lightweight stub
+# module.  The stub uses __getattr__ to safely handle ANY attribute access
+# (e.g. torch.cuda.Event, torch.cuda.amp.autocast) without enumerating them.
+import importlib, importlib.abc, importlib.machinery, types
 
-def _install_torch_stubs():
-    """Create minimal stubs for excluded torch accelerator modules."""
-    try:
-        import torch
-    except ImportError:
-        return  # torch itself not available yet
-    for mod_name in ("torch.cuda", "torch.xpu", "torch.mps", "torch.mtia"):
-        attr = mod_name.split(".")[1]  # cuda, xpu, mps, mtia
-        if importlib.util.find_spec(mod_name) is not None:
-            continue  # real module exists
-        stub = types.ModuleType(mod_name)
-        stub.is_available = lambda: False
-        stub.device_count = lambda: 0
-        stub.current_device = lambda: -1
-        stub.get_device_name = lambda *a, **kw: ""
-        stub.FloatTensor = None
-        sys.modules[mod_name] = stub
-        if not hasattr(torch, attr):
-            setattr(torch, attr, stub)
+_TORCH_STUB_ROOTS = frozenset({
+    # GPU backends (torch.__init__ imports these unconditionally)
+    "torch.cuda", "torch.xpu", "torch.mps", "torch.mtia",
+    # Dev/compile modules excluded by PyInstaller spec (imported
+    # conditionally by transformers — safe to return NullStub)
+    "torch._dynamo", "torch._inductor", "torch._export",
+    "torch.onnx", "torch.package",
+})
 
-_install_torch_stubs()
+
+class _NullStub:
+    """Falsy callable/subscriptable/iterable placeholder.
+
+    Any attribute access, call, or boolean test returns a safe no-op value.
+    This prevents guard checks like ``if torch.cuda._is_compiled():`` from
+    accidentally evaluating as True.
+    """
+    __slots__ = ()
+    def __bool__(self):         return False
+    def __call__(self, *a, **kw): return _NullStub()
+    def __getattr__(self, name):
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return _NullStub()
+    def __iter__(self):         return iter(())
+    def __len__(self):          return 0
+    def __enter__(self):        return self
+    def __exit__(self, *a):     return None
+    def __repr__(self):         return "<NullStub>"
+    def __getitem__(self, k):   return _NullStub()
+    # bitwise / augmented operators (used by transformers: _is_tracing |= ...)
+    def __or__(self, other):    return other
+    def __ror__(self, other):   return other
+    def __ior__(self, other):   return other
+    def __and__(self, other):   return False
+    def __rand__(self, other):  return False
+    def __iand__(self, other):  return False
+    def __int__(self):          return 0
+    def __float__(self):        return 0.0
+    def __index__(self):        return 0
+
+_null = _NullStub()
+
+
+class _TorchGPUStub(types.ModuleType):
+    """Module stub that reports no GPU and dynamically handles any attribute."""
+
+    def __init__(self, name):
+        super().__init__(name)
+        self.__path__ = []            # behave like a package
+        self.__package__ = name
+        self.__all__ = []
+
+    # ── common fast-path attributes ──
+    @staticmethod
+    def is_available(): return False
+    @staticmethod
+    def device_count(): return 0
+    @staticmethod
+    def current_device(): return -1
+    @staticmethod
+    def get_device_name(*a, **kw): return ""
+    FloatTensor = None
+    HalfTensor = None
+    DoubleTensor = None
+
+    def __getattr__(self, name):
+        """Return a safe falsy dummy for any attribute not explicitly defined."""
+        # Only reject dunder attrs to signal unsupported protocols
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return _NullStub()
+
+
+class _TorchStubFinder(importlib.abc.MetaPathFinder):
+    """Intercept imports of excluded torch GPU modules and return CPU-only stubs."""
+    _bakup_torch_stub = True  # sentinel for idempotency checks
+
+    def find_spec(self, fullname, path, target=None):
+        if fullname in _TORCH_STUB_ROOTS or any(
+            fullname.startswith(r + ".") for r in _TORCH_STUB_ROOTS
+        ):
+            return importlib.machinery.ModuleSpec(
+                fullname, _TorchStubLoader(), is_package=True,
+            )
+        return None
+
+
+class _TorchStubLoader(importlib.abc.Loader):
+    def create_module(self, spec):
+        return _TorchGPUStub(spec.name)
+
+    def exec_module(self, module):
+        pass
+
+
+# Install the finder at the FRONT of sys.meta_path so it runs before the
+# default finders — this ensures stubs are in place when `import torch` runs.
+sys.meta_path.insert(0, _TorchStubFinder())
+
+# ── Frozen-build dispatch fix ─────────────────────────────────────────────────
+# In PyInstaller builds, tensor operations (normal_, uniform_, fill_, etc.)
+# dispatch through the torch._refs decomposition path instead of the C++ ATen
+# backend, hitting an assertion in _prims_common/wrappers.py.
+#
+# Since we ONLY load pre-trained models (SentenceTransformer with saved
+# checkpoints), random weight initialisation is immediately overwritten from
+# the saved state dict.  Making every nn.init function a harmless no-op
+# completely sidesteps the broken dispatch — with zero impact on inference.
+if getattr(sys, 'frozen', False):
+    import torch as _torch
+    import torch.nn.init as _init
+
+    def _noop_init(tensor, *_a, **_kw):
+        return tensor
+
+    for _fn in (
+        # internal helpers
+        '_no_grad_normal_', '_no_grad_uniform_', '_no_grad_fill_',
+        '_no_grad_zero_',
+        # public API
+        'uniform_', 'normal_', 'constant_', 'ones_', 'zeros_',
+        'eye_', 'dirac_', 'xavier_uniform_', 'xavier_normal_',
+        'kaiming_uniform_', 'kaiming_normal_', 'orthogonal_', 'sparse_',
+        'trunc_normal_',
+    ):
+        if hasattr(_init, _fn):
+            setattr(_init, _fn, _noop_init)
 
 # ── Import and run ────────────────────────────────────────────────────────────
 # Now import the actual app (this triggers access check + config load)

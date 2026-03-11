@@ -26,25 +26,97 @@ _model = None
 
 
 def _ensure_torch_cuda_stub():
-    """Ensure torch accelerator modules are importable (stubs for CPU-only builds)."""
-    import importlib, types as _t, sys as _sys
-    try:
-        import torch
-    except ImportError:
+    """Pre-register stubs for excluded torch GPU modules (frozen builds only).
+
+    In PyInstaller builds, torch.cuda is excluded to save space.  But
+    torch.__init__.py does ``from torch import cuda`` on import, which would
+    crash with 'No module named torch.cuda'.  A MetaPathFinder installed
+    BEFORE the first ``import torch`` intercepts those imports and returns
+    lightweight stubs that report no GPU available.
+
+    In dev mode (not frozen), the real torch.cuda is available, so this
+    function is a no-op.
+    """
+    import sys as _sys
+
+    # Only needed inside a frozen (PyInstaller) binary
+    if not getattr(_sys, 'frozen', False):
         return
-    for mod_name in ("torch.cuda", "torch.xpu", "torch.mps", "torch.mtia"):
-        attr = mod_name.split(".")[1]
-        if importlib.util.find_spec(mod_name) is not None:
-            continue
-        stub = _t.ModuleType(mod_name)
-        stub.is_available = lambda: False
-        stub.device_count = lambda: 0
-        stub.current_device = lambda: -1
-        stub.get_device_name = lambda *a, **kw: ""
-        stub.FloatTensor = None
-        _sys.modules[mod_name] = stub
-        if not hasattr(torch, attr):
-            setattr(torch, attr, stub)
+
+    # Idempotency: skip if already installed
+    if any(getattr(f, '_bakup_torch_stub', False) for f in _sys.meta_path):
+        return
+
+    import importlib, importlib.abc, importlib.machinery, types as _t
+
+    _ROOTS = frozenset({
+        # GPU backends (torch.__init__ imports these unconditionally)
+        "torch.cuda", "torch.xpu", "torch.mps", "torch.mtia",
+        # Dev/compile modules excluded by PyInstaller spec
+        "torch._dynamo", "torch._inductor", "torch._export",
+        "torch.onnx", "torch.package",
+    })
+
+    class _NullStub:
+        """Falsy callable placeholder for dynamic attribute access."""
+        __slots__ = ()
+        def __bool__(self):         return False
+        def __call__(self, *a, **kw): return _NullStub()
+        def __getattr__(self, name):
+            if name.startswith("__") and name.endswith("__"):
+                raise AttributeError(name)
+            return _NullStub()
+        def __iter__(self):         return iter(())
+        def __len__(self):          return 0
+        def __enter__(self):        return self
+        def __exit__(self, *a):     return None
+        def __repr__(self):         return "<NullStub>"
+        def __getitem__(self, k):   return _NullStub()
+        def __or__(self, other):    return other
+        def __ror__(self, other):   return other
+        def __ior__(self, other):   return other
+        def __and__(self, other):   return False
+        def __rand__(self, other):  return False
+        def __iand__(self, other):  return False
+        def __int__(self):          return 0
+        def __float__(self):        return 0.0
+        def __index__(self):        return 0
+
+    class _GPUStub(_t.ModuleType):
+        """Stub that reports no GPU and dynamically handles any attr access."""
+        def __init__(self, name):
+            super().__init__(name)
+            self.__path__ = []
+            self.__package__ = name
+            self.__all__ = []
+        @staticmethod
+        def is_available(): return False
+        @staticmethod
+        def device_count(): return 0
+        @staticmethod
+        def current_device(): return -1
+        @staticmethod
+        def get_device_name(*a, **kw): return ""
+        FloatTensor = None
+        def __getattr__(self, name):
+            if name.startswith("__") and name.endswith("__"):
+                raise AttributeError(name)
+            return _NullStub()
+
+    class _Finder(importlib.abc.MetaPathFinder):
+        _bakup_torch_stub = True
+        def find_spec(self, fullname, path, target=None):
+            if fullname in _ROOTS or any(fullname.startswith(r + ".") for r in _ROOTS):
+                return importlib.machinery.ModuleSpec(fullname, _Loader(), is_package=True)
+            return None
+
+    class _Loader(importlib.abc.Loader):
+        def create_module(self, spec):
+            return _GPUStub(spec.name)
+        def exec_module(self, module):
+            pass
+
+    _sys.meta_path.insert(0, _Finder())
 
 
 def _get_model():

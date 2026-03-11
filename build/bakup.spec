@@ -182,20 +182,15 @@ a = Analysis(
         # Test frameworks — not needed in production
         "pytest",
         "_pytest",
-        "unittest",
-        "doctest",
 
         # Torch subsystems — we only need CPU inference
-        "torch.testing",
-        "torch.distributed",
+        # NOTE: distributed, testing, ao, profiler, compiler MUST stay
+        # included — they are unconditionally imported by torch.__init__.
         "torch._inductor",
         "torch._dynamo",
         "torch.onnx",
         "torch._export",
-        "torch.ao",
-        "torch.profiler",
         "torch.package",
-        "torch.compiler",
         "torch.cuda",
         "torch.xpu",
         "torch.mps",
@@ -208,10 +203,6 @@ a = Analysis(
         "ensurepip",
         "venv",
         "lib2to3",
-        "pydoc",
-        "pdb",
-        "cProfile",
-        "profile",
 
         # Tensorboard — pulled by torch but not used
         "tensorboard",
