@@ -3,30 +3,36 @@ core/llm/llm_service.py
 ─────────────────────────────────────────────────────────────────────────────
 LLM abstraction layer for bakup.ai.
 
-Supports three providers:
-  - openai       — OpenAI API (GPT-4o-mini, GPT-4o, etc.)
+Supports four providers via adapter modules in core.llm.providers:
+  - openai       — OpenAI API (GPT-4o, GPT-4.1, etc.)
+  - anthropic    — Anthropic Claude API (Sonnet, Opus, Haiku)
   - azure_openai — Azure OpenAI deployment
-  - ollama       — Local Ollama server (llama3, mistral, codellama, etc.)
+  - ollama       — Local Ollama server (gemma3, llama3, mistral, codellama)
 
 Design principles:
   1. Single entry point: LLMService.generate_response(chunks, question)
-  2. Provider logic is fully isolated — swapping providers requires only a
-     config change, no code change anywhere in the rest of the app.
+  2. Provider logic is fully isolated in adapter modules — swapping providers
+     requires only a config change, no code change anywhere in the rest of
+     the app.
   3. The API key is read from config_store at call time and is NEVER stored
      as an instance variable, class variable, or written to any log.
   4. All responses include source citations and a confidence label.
   5. If no relevant context exists, the answer is always the canonical
      "No similar incident found." string — never a hallucinated answer.
+  6. Debug logging emits provider, model, and context size for every query.
+  7. Fallback logic: clear errors, no crashes — falls back to extractive.
 
 Dependencies (install only what you need):
   openai       → pip install openai
   azure_openai → pip install openai   (same package, different client init)
-  ollama       → pip install ollama   (or just needs Ollama running locally)
+  anthropic    → urllib only (no extra dependency)
+  ollama       → urllib only (just needs Ollama running locally)
 """
 
 from __future__ import annotations
 
 import enum
+import logging
 import os
 import textwrap
 from dataclasses import dataclass, field
@@ -41,6 +47,18 @@ from core.llm.prompt_templates import (
     build_clarify_user_message,
     build_context_block,
 )
+
+# Provider adapters (lazy-loaded via adapter modules)
+from core.llm.providers import (
+    ollama_call, ollama_call_with_tools, ollama_ping,
+    openai_call, openai_call_with_tools, openai_ping,
+    anthropic_call, anthropic_call_with_tools, anthropic_ping,
+)
+from core.llm.providers.openai_provider import (
+    call_azure, call_azure_with_tools, ping_azure,
+)
+
+log = logging.getLogger("bakup.llm")
 
 
 # ── Health-check result cache (avoids pinging provider on every poll) ─────────
@@ -636,26 +654,32 @@ class LLMService:
         user_message: str,
         system_prompt: str = SYSTEM_RAG,
     ) -> str:
+        """Route to the appropriate provider adapter."""
+        log.info("LLM CALL  provider=%s  model=%s  prompt_len=%d  context_len=%d",
+                 cfg.provider, cfg.model, len(system_prompt), len(user_message))
+        print(f"  [bakup:llm] provider={cfg.provider}  model={cfg.model}  "
+              f"prompt={len(system_prompt)} chars  context={len(user_message)} chars")
+
         if cfg.provider == "openai":
-            return self._call_openai(cfg, user_message, system_prompt)
+            return openai_call(cfg, user_message, system_prompt)
         if cfg.provider == "anthropic":
-            return self._call_anthropic(cfg, user_message, system_prompt)
+            return anthropic_call(cfg, user_message, system_prompt)
         if cfg.provider == "azure_openai":
-            return self._call_azure(cfg, user_message, system_prompt)
+            return call_azure(cfg, user_message, system_prompt)
         if cfg.provider == "ollama":
-            return self._call_ollama(cfg, user_message, system_prompt)
+            return ollama_call(cfg, user_message, system_prompt)
         raise ValueError(f"Unknown LLM provider: {cfg.provider!r}")
 
     def _ping_provider(self, cfg: LLMConfig) -> None:
         """Lightweight connectivity check — raises on failure."""
         if cfg.provider == "openai":
-            self._ping_openai(cfg)
+            openai_ping(cfg)
         elif cfg.provider == "anthropic":
-            self._ping_anthropic(cfg)
+            anthropic_ping(cfg)
         elif cfg.provider == "azure_openai":
-            self._ping_azure(cfg)
+            ping_azure(cfg)
         elif cfg.provider == "ollama":
-            self._ping_ollama(cfg)
+            ollama_ping(cfg)
         else:
             raise ValueError(f"Unknown provider: {cfg.provider!r}")
 
@@ -681,377 +705,18 @@ class LLMService:
               - "content":    str — text response (may be empty if tool_calls)
               - "tool_calls": list[dict] — each with "id", "name", "arguments"
         """
+        log.info("TOOL CALL  provider=%s  model=%s  tools=%d",
+                 cfg.provider, cfg.model, len(tools))
+
         if cfg.provider == "openai":
-            return self._call_openai_with_tools(cfg, messages, tools)
+            return openai_call_with_tools(cfg, messages, tools)
         if cfg.provider == "anthropic":
-            return self._call_anthropic_with_tools(cfg, messages, tools)
+            return anthropic_call_with_tools(cfg, messages, tools)
         if cfg.provider == "azure_openai":
-            return self._call_azure_with_tools(cfg, messages, tools)
+            return call_azure_with_tools(cfg, messages, tools)
         if cfg.provider == "ollama":
-            return self._call_ollama_with_tools(cfg, messages, tools)
+            return ollama_call_with_tools(cfg, messages, tools)
         raise ValueError(f"Unknown LLM provider for tool calling: {cfg.provider!r}")
-
-    def _call_openai_with_tools(self, cfg, messages, tools) -> dict:
-        try:
-            from openai import OpenAI
-        except ImportError:
-            raise RuntimeError("openai package not installed. Run: pip install openai")
-
-        client = OpenAI(api_key=cfg.api_key)
-        kwargs = {
-            "model": cfg.model,
-            "messages": messages,
-            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-        }
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-
-        completion = client.chat.completions.create(**kwargs)
-        msg = completion.choices[0].message
-
-        result: dict = {"content": msg.content or "", "tool_calls": []}
-        if msg.tool_calls:
-            for tc in msg.tool_calls:
-                import json as _json
-                try:
-                    args = _json.loads(tc.function.arguments)
-                except (ValueError, TypeError):
-                    args = {}
-                result["tool_calls"].append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "arguments": args,
-                })
-        return result
-
-    def _call_azure_with_tools(self, cfg, messages, tools) -> dict:
-        try:
-            from openai import AzureOpenAI
-        except ImportError:
-            raise RuntimeError("openai package not installed. Run: pip install openai")
-
-        if not cfg.azure_endpoint:
-            raise ValueError("Azure endpoint URL is required.")
-
-        client = AzureOpenAI(
-            api_key=cfg.api_key,
-            azure_endpoint=cfg.azure_endpoint,
-            api_version=cfg.azure_api_version or "2024-02-01",
-        )
-        kwargs = {
-            "model": cfg.model,
-            "messages": messages,
-            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-        }
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-
-        completion = client.chat.completions.create(**kwargs)
-        msg = completion.choices[0].message
-
-        result: dict = {"content": msg.content or "", "tool_calls": []}
-        if msg.tool_calls:
-            for tc in msg.tool_calls:
-                import json as _json
-                try:
-                    args = _json.loads(tc.function.arguments)
-                except (ValueError, TypeError):
-                    args = {}
-                result["tool_calls"].append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "arguments": args,
-                })
-        return result
-
-    def _call_anthropic_with_tools(self, cfg, messages, tools) -> dict:
-        import json as _json
-        import urllib.request
-
-        # Separate system message from conversation messages
-        system_text = ""
-        conv_messages = []
-        for m in messages:
-            if m["role"] == "system":
-                system_text = m["content"] if isinstance(m["content"], str) else str(m["content"])
-            else:
-                conv_messages.append(m)
-
-        payload: dict = {
-            "model": cfg.model,
-            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-            "messages": conv_messages,
-        }
-        if system_text:
-            payload["system"] = system_text
-        if tools:
-            payload["tools"] = tools
-
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=_json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": cfg.api_key,
-                "anthropic-version": "2023-06-01",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = _json.loads(resp.read().decode())
-
-        # Parse Anthropic response
-        content_text = ""
-        tool_calls = []
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                content_text += block.get("text", "")
-            elif block.get("type") == "tool_use":
-                tool_calls.append({
-                    "id": block.get("id", ""),
-                    "name": block.get("name", ""),
-                    "arguments": block.get("input", {}),
-                })
-
-        return {"content": content_text, "tool_calls": tool_calls}
-
-    def _call_ollama_with_tools(self, cfg, messages, tools) -> dict:
-        import json as _json
-        import urllib.request
-
-        base = (cfg.ollama_base_url or DEFAULT_OLLAMA_URL).rstrip("/")
-        url = f"{base}/api/chat"
-
-        payload: dict = {
-            "model": cfg.model,
-            "stream": False,
-            "options": {
-                "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-                "num_predict": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            },
-            "messages": messages,
-        }
-        if tools:
-            # Ollama uses OpenAI-compatible tool format
-            payload["tools"] = tools
-
-        req = urllib.request.Request(
-            url,
-            data=_json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = _json.loads(resp.read().decode())
-
-        msg = data.get("message", {})
-        content = msg.get("content", "")
-        tool_calls = []
-
-        for tc in msg.get("tool_calls", []):
-            fn = tc.get("function", {})
-            tool_calls.append({
-                "id": tc.get("id", f"call_{len(tool_calls)}"),
-                "name": fn.get("name", ""),
-                "arguments": fn.get("arguments", {}),
-            })
-
-        return {"content": content, "tool_calls": tool_calls}
-
-    # ── Anthropic (Claude) ───────────────────────────────────────────────────
-
-    def _call_anthropic(self, cfg: LLMConfig, user_message: str, system_prompt: str = SYSTEM_RAG) -> str:
-        """
-        Call the Anthropic Messages API via urllib (no extra dependency).
-        Supports Claude 3.5 Sonnet, Claude 3 Opus, etc.
-        """
-        import json
-        import urllib.request
-
-        payload = {
-            "model": cfg.model,
-            "max_tokens": int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-            "system": system_prompt,
-            "messages": [
-                {"role": "user", "content": user_message},
-            ],
-        }
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": cfg.api_key,
-                "anthropic-version": "2023-06-01",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode())
-
-        # Extract text from content blocks
-        text_parts = []
-        for block in data.get("content", []):
-            if block.get("type") == "text":
-                text_parts.append(block.get("text", ""))
-        return "".join(text_parts)
-
-    def _ping_anthropic(self, cfg: LLMConfig) -> None:
-        """Validate Anthropic API key with a minimal request."""
-        import json
-        import urllib.request
-
-        payload = {
-            "model": cfg.model,
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "ping"}],
-        }
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": cfg.api_key,
-                "anthropic-version": "2023-06-01",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                pass  # 200 = key is valid
-        except urllib.error.HTTPError as e:
-            if e.code == 401:
-                raise RuntimeError("Invalid Anthropic API key.")
-            # Other errors (rate limit, etc.) still mean the key is working
-            if e.code >= 500:
-                raise
-
-    # ── OpenAI ────────────────────────────────────────────────────────────────
-
-    def _call_openai(self, cfg: LLMConfig, user_message: str, system_prompt: str = SYSTEM_RAG) -> str:
-        try:
-            from openai import OpenAI       # type: ignore
-        except ImportError:
-            raise RuntimeError(
-                "openai package not installed. Run: pip install openai"
-            )
-
-        client = OpenAI(api_key=cfg.api_key)   # key used here only, not stored
-        completion = client.chat.completions.create(
-            model=cfg.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_message},
-            ],
-            max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            temperature=float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-        )
-        return completion.choices[0].message.content or ""
-
-    def _ping_openai(self, cfg: LLMConfig) -> None:
-        try:
-            from openai import OpenAI   # type: ignore
-        except ImportError:
-            raise RuntimeError("openai package not installed. Run: pip install openai")
-        client = OpenAI(api_key=cfg.api_key)
-        # List models is a cheap, non-billable call that validates the key.
-        client.models.list()
-
-    # ── Azure OpenAI ──────────────────────────────────────────────────────────
-
-    def _call_azure(self, cfg: LLMConfig, user_message: str, system_prompt: str = SYSTEM_RAG) -> str:
-        try:
-            from openai import AzureOpenAI   # type: ignore
-        except ImportError:
-            raise RuntimeError(
-                "openai package not installed. Run: pip install openai"
-            )
-
-        if not cfg.azure_endpoint:
-            raise ValueError("Azure endpoint URL is required for azure_openai provider.")
-
-        client = AzureOpenAI(
-            api_key        = cfg.api_key,
-            azure_endpoint = cfg.azure_endpoint,
-            api_version    = cfg.azure_api_version or "2024-02-01",
-        )
-        completion = client.chat.completions.create(
-            model=cfg.model,   # deployment name for Azure
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_message},
-            ],
-            max_tokens=int(os.environ.get("BAKUP_LLM_MAX_TOKENS", "2048")),
-            temperature=float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-        )
-        return completion.choices[0].message.content or ""
-
-    def _ping_azure(self, cfg: LLMConfig) -> None:
-        try:
-            from openai import AzureOpenAI   # type: ignore
-        except ImportError:
-            raise RuntimeError("openai package not installed. Run: pip install openai")
-        if not cfg.azure_endpoint:
-            raise ValueError("Azure endpoint URL is required.")
-        client = AzureOpenAI(
-            api_key=cfg.api_key,
-            azure_endpoint=cfg.azure_endpoint,
-            api_version=cfg.azure_api_version or "2024-02-01",
-        )
-        client.models.list()
-
-    # ── Ollama ────────────────────────────────────────────────────────────────
-
-    def _call_ollama(self, cfg: LLMConfig, user_message: str, system_prompt: str = SYSTEM_RAG) -> str:
-        """
-        Calls the local Ollama server via its REST API.
-        Does NOT require the `ollama` Python package — uses urllib only,
-        so there are no extra dependencies for local-only users.
-        """
-        import json
-        import urllib.request
-
-        base = (cfg.ollama_base_url or DEFAULT_OLLAMA_URL).rstrip("/")
-        url  = f"{base}/api/chat"
-        payload = {
-            "model":  cfg.model,
-            "stream": False,
-            "options": {
-                "temperature": float(os.environ.get("BAKUP_LLM_TEMPERATURE", "0.1")),
-                "num_predict": int(os.environ.get("BAKUP_LLM_MAX_TOKENS",   "2048")),
-            },
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_message},
-            ],
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = json.loads(resp.read().decode())
-
-        return data.get("message", {}).get("content", "")
-
-    def _ping_ollama(self, cfg: LLMConfig) -> None:
-        import urllib.request
-        base = (cfg.ollama_base_url or DEFAULT_OLLAMA_URL).rstrip("/")
-        try:
-            urllib.request.urlopen(f"{base}/api/tags", timeout=5)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Cannot reach Ollama at {base}. "
-                f"Is Ollama running? (ollama serve)  Detail: {exc}"
-            )
 
     # ── Extractive fallback ───────────────────────────────────────────────────
 

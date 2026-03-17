@@ -27,6 +27,7 @@ Architecture:
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
@@ -608,7 +609,7 @@ def execute_plan(
 def build_evidence_context(
     evidence: StructuredEvidence,
     max_chars: int = 1200,
-    max_total_chars: int = 12000,
+    max_total_chars: int = int(os.environ.get("BAKUP_MAX_CONTEXT_CHARS", "8000")),
 ) -> str:
     """
     Render structured evidence into a context block for the LLM prompt.

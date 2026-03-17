@@ -111,6 +111,22 @@
         </div>
         <h2 class="welcome-title">Ask anything about your project</h2>
         <p class="welcome-sub">Index a codebase or log folder, then ask questions in plain English. Bakup ingests files recursively, clusters error patterns, detects spikes and regressions, and delivers root-cause analysis with causal confidence scoring. No data leaves your machine.</p>
+
+        <!-- LLM recommendation banner (shown when AI is not configured) -->
+        <div class="llm-recommend-banner" id="llm-recommend-banner" hidden>
+          <div class="llm-recommend-banner__icon">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="10" cy="10" r="8.5"/>
+              <path d="M10 6v5M10 13.5v.5"/>
+            </svg>
+          </div>
+          <div class="llm-recommend-banner__text">
+            <strong>AI not configured.</strong>
+            Connect an LLM provider for full root-cause analysis, cross-file reasoning, and intelligent summaries. Without it, results are extractive only.
+          </div>
+          <button class="llm-recommend-banner__btn" id="llm-recommend-btn">Configure AI</button>
+        </div>
+
         <div class="welcome-chips">
           <button class="chip" data-q="What errors appear across all log files?">What errors appear across all log files?</button>
           <button class="chip" data-q="Why is the application failing?">Why is the application failing?</button>
@@ -295,14 +311,18 @@
       <form id="llm-setup-form" autocomplete="off" novalidate>
         <label class="form-label" for="llm-provider">Provider</label>
         <select class="form-input" id="llm-provider">
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic (Claude)</option>
-          <option value="azure_openai">Azure OpenAI</option>
-          <option value="ollama">Ollama (local, no key needed)</option>
+          <!-- Populated dynamically from /llm/providers -->
         </select>
 
         <label class="form-label" for="llm-model">Model</label>
-        <input type="text" id="llm-model" class="form-input" placeholder="gpt-4o-mini" spellcheck="false"/>
+        <select class="form-input" id="llm-model">
+          <!-- Populated dynamically based on selected provider -->
+        </select>
+        <input type="text" id="llm-model-custom" class="form-input llm-model-custom" placeholder="Or type a custom model name…" spellcheck="false" style="margin-top:4px;"/>
+        <div class="ollama-detected" id="ollama-detected" hidden>
+          <span class="ollama-detected__label">Detected locally:</span>
+          <div class="ollama-detected__list" id="ollama-detected-list"></div>
+        </div>
 
         <div class="setup-field-group" id="llm-key-group">
           <label class="form-label" for="llm-api-key">API Key</label>
@@ -320,6 +340,29 @@
           <label class="form-label" for="llm-ollama-url">Ollama Base URL</label>
           <input type="text" id="llm-ollama-url" class="form-input" value="http://localhost:11434" spellcheck="false"/>
         </div>
+
+        <!-- Advanced LLM Parameters -->
+        <details class="setup-advanced" id="llm-advanced">
+          <summary class="setup-advanced__toggle">Advanced Settings</summary>
+          <div class="setup-advanced__body">
+            <div class="setup-param-row">
+              <label class="form-label form-label--sm" for="llm-temperature">Temperature</label>
+              <input type="number" id="llm-temperature" class="form-input form-input--sm" value="0.1" min="0" max="2" step="0.05"/>
+            </div>
+            <div class="setup-param-row">
+              <label class="form-label form-label--sm" for="llm-num-predict">Max Tokens</label>
+              <input type="number" id="llm-num-predict" class="form-input form-input--sm" value="1024" min="64" max="32768" step="64"/>
+            </div>
+            <div class="setup-param-row">
+              <label class="form-label form-label--sm" for="llm-num-ctx">Context Window <span class="form-optional">Ollama only</span></label>
+              <input type="number" id="llm-num-ctx" class="form-input form-input--sm" value="8192" min="512" max="131072" step="512"/>
+            </div>
+            <div class="setup-param-row">
+              <label class="form-label form-label--sm" for="llm-timeout">Timeout (seconds)</label>
+              <input type="number" id="llm-timeout" class="form-input form-input--sm" value="300" min="10" max="1800" step="10"/>
+            </div>
+          </div>
+        </details>
 
         <div class="setup-test-row">
           <button type="button" class="ghost-btn" id="llm-test-btn">Test Connection</button>

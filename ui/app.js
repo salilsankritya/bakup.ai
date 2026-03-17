@@ -13,7 +13,7 @@ const API_BASE       = ['3000','5500'].includes(location.port)
                        ? `${location.protocol}//${location.hostname}:8000`
                        : '';
 const HEALTH_POLL_MS = 15_000;
-const DEFAULT_MODELS = { openai: 'gpt-4o-mini', anthropic: 'claude-sonnet-4-20250514', azure_openai: 'gpt-4o-mini', ollama: 'llama3' };
+const DEFAULT_MODELS = { openai: 'gpt-4o', anthropic: 'claude-sonnet-4-20250514', azure_openai: 'gpt-4o', ollama: 'gemma3:4b' };
 const LS_SESSIONS    = 'bakup_sessions_v2';
 const LS_ACTIVE      = 'bakup_active_session_v2';
 
@@ -90,26 +90,38 @@ const renameCancelBtn   = $('rename-cancel-btn');
 const closeRenameBtn    = $('close-rename-btn');
 
 // LLM setup modal
-const llmSetupModal    = $('llm-setup-modal');
-const closeLlmBtn      = $('close-llm-setup-btn');
-const llmSetupBtn      = $('llm-setup-btn');
-const sidebarLlmBtn    = $('sidebar-llm-btn');
-const llmStatusDot     = $('llm-status-dot');
-const llmStatusLabel   = $('llm-status-label');
-const llmSetupForm     = $('llm-setup-form');
-const llmProvider      = $('llm-provider');
-const llmModel         = $('llm-model');
-const llmApiKey        = $('llm-api-key');
-const llmAzureEndpoint = $('llm-azure-endpoint');
-const llmAzureVersion  = $('llm-azure-version');
-const llmOllamaUrl     = $('llm-ollama-url');
-const llmTestBtn       = $('llm-test-btn');
-const llmTestResult    = $('llm-test-result');
-const llmSaveBtn       = $('llm-save-btn');
-const llmSkipBtn       = $('llm-skip-btn');
-const llmKeyGroup      = $('llm-key-group');
-const llmAzureGroup    = $('llm-azure-group');
-const llmOllamaGroup   = $('llm-ollama-group');
+const llmSetupModal      = $('llm-setup-modal');
+const closeLlmBtn        = $('close-llm-setup-btn');
+const llmSetupBtn        = $('llm-setup-btn');
+const sidebarLlmBtn      = $('sidebar-llm-btn');
+const llmStatusDot       = $('llm-status-dot');
+const llmStatusLabel     = $('llm-status-label');
+const llmSetupForm       = $('llm-setup-form');
+const llmProvider        = $('llm-provider');
+const llmModel           = $('llm-model');
+const llmModelCustom     = $('llm-model-custom');
+const llmApiKey          = $('llm-api-key');
+const llmAzureEndpoint   = $('llm-azure-endpoint');
+const llmAzureVersion    = $('llm-azure-version');
+const llmOllamaUrl       = $('llm-ollama-url');
+const llmTestBtn         = $('llm-test-btn');
+const llmTestResult      = $('llm-test-result');
+const llmSaveBtn         = $('llm-save-btn');
+const llmSkipBtn         = $('llm-skip-btn');
+const llmKeyGroup        = $('llm-key-group');
+const llmAzureGroup      = $('llm-azure-group');
+const llmOllamaGroup     = $('llm-ollama-group');
+const llmTemperature     = $('llm-temperature');
+const llmNumPredict      = $('llm-num-predict');
+const llmNumCtx          = $('llm-num-ctx');
+const llmTimeout         = $('llm-timeout');
+const ollamaDetected     = $('ollama-detected');
+const ollamaDetectedList = $('ollama-detected-list');
+const llmRecommendBanner = $('llm-recommend-banner');
+const llmRecommendBtn    = $('llm-recommend-btn');
+
+// Provider metadata cache (loaded once from /llm/providers)
+let _providerData = null;
 
 // ─── Session State ────────────────────────────────────────────────────────────
 let sessions    = [];     // Session[]
@@ -1075,21 +1087,114 @@ function updateLlmStatus(status, message) {
                              : status === 'error'          ? 'AI Error'
                              : 'AI…';
   llmStatusDot.title = message || '';
+  updateLlmRecommendBanner(status);
 }
 
 // ─── LLM setup modal ──────────────────────────────────────────────────────────────────────
-function openLlmSetupModal() {
+
+async function loadProviderData() {
+  if (_providerData) return _providerData;
+  try {
+    _providerData = await apiGet('/llm/providers');
+  } catch {
+    // Fallback: use built-in defaults
+    _providerData = { providers: [
+      { id: 'openai',       label: 'OpenAI',                needs_key: true, default_model: 'gpt-4o',                    models: [{label:'GPT-4o',value:'gpt-4o'},{label:'GPT-4.1',value:'gpt-4.1'},{label:'GPT-4.1 Mini',value:'gpt-4.1-mini'},{label:'GPT-4o Mini',value:'gpt-4o-mini'}] },
+      { id: 'anthropic',    label: 'Anthropic (Claude)',     needs_key: true, default_model: 'claude-sonnet-4-20250514',  models: [{label:'Claude Sonnet 4',value:'claude-sonnet-4-20250514'},{label:'Claude Opus 4',value:'claude-opus-4-20250514'},{label:'Claude Haiku 3.5',value:'claude-3-5-haiku-20241022'}] },
+      { id: 'azure_openai', label: 'Azure OpenAI',          needs_key: true, default_model: 'gpt-4o',                    models: [{label:'GPT-4o',value:'gpt-4o'},{label:'GPT-4.1',value:'gpt-4.1'},{label:'GPT-4.1 Mini',value:'gpt-4.1-mini'}] },
+      { id: 'ollama',       label: 'Ollama (local, no key)', needs_key: false, default_model: 'gemma3:4b',               models: [{label:'Gemma 3 4B',value:'gemma3:4b'},{label:'LLaMA 3',value:'llama3'},{label:'Mistral',value:'mistral'},{label:'CodeLlama',value:'codellama'}] },
+    ], defaults: DEFAULT_MODELS, default_params: { temperature: 0.1, num_predict: 1024, num_ctx: 8192, timeout: 300 } };
+  }
+  return _providerData;
+}
+
+function populateProviderDropdown(providers) {
+  llmProvider.innerHTML = '';
+  for (const p of providers) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.label;
+    llmProvider.appendChild(opt);
+  }
+}
+
+function populateModelDropdown(models, currentModel) {
+  llmModel.innerHTML = '';
+  for (const m of models) {
+    const opt = document.createElement('option');
+    opt.value = m.value;
+    opt.textContent = m.label;
+    if (m.value === currentModel) opt.selected = true;
+    llmModel.appendChild(opt);
+  }
+}
+
+async function detectOllamaModels() {
+  if (llmProvider.value !== 'ollama') {
+    ollamaDetected.hidden = true;
+    return;
+  }
+  try {
+    const data = await apiGet('/llm/ollama-models');
+    if (data.models && data.models.length > 0) {
+      ollamaDetected.hidden = false;
+      ollamaDetectedList.innerHTML = '';
+      for (const m of data.models) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ollama-model-chip';
+        const sizeMB = m.size ? Math.round(m.size / 1048576) : 0;
+        btn.textContent = m.name + (sizeMB ? ` (${sizeMB}MB)` : '');
+        btn.addEventListener('click', () => {
+          llmModel.value = m.name;
+          llmModelCustom.value = '';
+          // Also add to dropdown if not present
+          const exists = Array.from(llmModel.options).some(o => o.value === m.name);
+          if (!exists) {
+            const opt = document.createElement('option');
+            opt.value = m.name;
+            opt.textContent = m.name;
+            llmModel.appendChild(opt);
+          }
+          llmModel.value = m.name;
+        });
+        ollamaDetectedList.appendChild(btn);
+      }
+    } else {
+      ollamaDetected.hidden = true;
+    }
+  } catch {
+    ollamaDetected.hidden = true;
+  }
+}
+
+async function openLlmSetupModal() {
   llmSetupModal.hidden = false;
   clearTestResult();
-  apiGet('/llm/config').then(cfg => {
-    llmProvider.value       = cfg.provider || 'openai';
-    llmModel.value          = cfg.model    || DEFAULT_MODELS[cfg.provider] || '';
+
+  const pd = await loadProviderData();
+  populateProviderDropdown(pd.providers);
+
+  try {
+    const cfg = await apiGet('/llm/config');
+    llmProvider.value       = cfg.provider || 'ollama';
     llmApiKey.value         = cfg.api_key_set ? '••••••••' : '';
     llmAzureEndpoint.value  = cfg.azure_endpoint    || '';
     llmAzureVersion.value   = cfg.azure_api_version || '2024-02-01';
     llmOllamaUrl.value      = cfg.ollama_base_url   || 'http://localhost:11434';
+    llmTemperature.value    = cfg.temperature ?? 0.1;
+    llmNumPredict.value     = cfg.num_predict ?? 1024;
+    llmNumCtx.value         = cfg.num_ctx     ?? 8192;
+    llmTimeout.value        = cfg.timeout     ?? 300;
+
+    // Populate model dropdown for the current provider
+    const provInfo = pd.providers.find(p => p.id === cfg.provider);
+    if (provInfo) populateModelDropdown(provInfo.models, cfg.model);
+    llmModelCustom.value = '';
     syncProviderFields();
-  }).catch(() => syncProviderFields());
+  } catch {
+    syncProviderFields();
+  }
 }
 
 function closeLlmSetup() {
@@ -1099,14 +1204,27 @@ function closeLlmSetup() {
 
 function syncProviderFields() {
   const p = llmProvider.value;
-  if (!llmModel.value || Object.values(DEFAULT_MODELS).includes(llmModel.value)) {
-    llmModel.value = DEFAULT_MODELS[p] || '';
+
+  // Populate model dropdown from provider data
+  if (_providerData) {
+    const provInfo = _providerData.providers.find(pr => pr.id === p);
+    if (provInfo) {
+      const currentModel = llmModel.value;
+      populateModelDropdown(provInfo.models, currentModel);
+      // If current model isn't in the list, default to provider's default
+      if (!Array.from(llmModel.options).some(o => o.value === currentModel && o.selected)) {
+        llmModel.value = provInfo.default_model || '';
+      }
+    }
   }
+
   llmKeyGroup.hidden    = (p === 'ollama');
   llmAzureGroup.hidden  = (p !== 'azure_openai');
   llmOllamaGroup.hidden = (p !== 'ollama');
-  // Update API key placeholder per provider
   llmApiKey.placeholder = p === 'anthropic' ? 'sk-ant-…' : 'sk-…';
+
+  // Auto-detect Ollama models when Ollama is selected
+  detectOllamaModels();
 }
 
 function clearTestResult() {
@@ -1115,19 +1233,45 @@ function clearTestResult() {
   llmTestResult.className = 'setup-test-result';
 }
 
+function getSelectedModel() {
+  const custom = llmModelCustom.value.trim();
+  return custom || llmModel.value;
+}
+
 function buildLlmConfigBody() {
-  const p    = llmProvider.value;
-  const body = { provider: p, model: llmModel.value.trim() || DEFAULT_MODELS[p] };
-  const key  = llmApiKey.value.trim();
+  const p     = llmProvider.value;
+  const model = getSelectedModel() || DEFAULT_MODELS[p];
+  const body  = { provider: p, model: model };
+
+  const key = llmApiKey.value.trim();
   if (key && !key.startsWith('•')) body.api_key = key;
+
   if (p === 'azure_openai') {
-    body.azure_endpoint     = llmAzureEndpoint.value.trim();
-    body.azure_api_version  = llmAzureVersion.value.trim() || '2024-02-01';
+    body.azure_endpoint    = llmAzureEndpoint.value.trim();
+    body.azure_api_version = llmAzureVersion.value.trim() || '2024-02-01';
   }
   if (p === 'ollama') {
     body.ollama_base_url = llmOllamaUrl.value.trim() || 'http://localhost:11434';
   }
+
+  // Include advanced parameters
+  body.temperature = parseFloat(llmTemperature.value) || 0.1;
+  body.num_predict = parseInt(llmNumPredict.value, 10) || 1024;
+  body.num_ctx     = parseInt(llmNumCtx.value, 10)     || 8192;
+  body.timeout     = parseInt(llmTimeout.value, 10)    || 300;
+
   return body;
+}
+
+// LLM recommendation banner
+function updateLlmRecommendBanner(status) {
+  if (llmRecommendBanner) {
+    llmRecommendBanner.hidden = (status === 'ready');
+  }
+}
+
+if (llmRecommendBtn) {
+  llmRecommendBtn.addEventListener('click', openLlmSetupModal);
 }
 
 [llmSetupBtn, sidebarLlmBtn].forEach(btn =>
@@ -1198,6 +1342,9 @@ setInterval(checkHealth, HEALTH_POLL_MS);
   renderSidebar();
   updateHeader();
   renderMessages();
+
+  // Preload provider data for the LLM modal
+  await loadProviderData();
   syncProviderFields();
 
   const health = await checkHealth();
@@ -1205,4 +1352,6 @@ setInterval(checkHealth, HEALTH_POLL_MS);
   if (health?.llm_status === 'not_configured') {
     openLlmSetupModal();
   }
+  // Update recommendation banner
+  updateLlmRecommendBanner(health?.llm_status);
 })();

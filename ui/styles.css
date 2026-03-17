@@ -1331,4 +1331,139 @@ body {
   line-height: 1.45;
 }
 
+/* ── LLM recommendation banner ─────────────────────────────────────────────── */
+.llm-recommend-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.25);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 16px 0 8px;
+  max-width: 640px;
+}
+.llm-recommend-banner__icon {
+  flex-shrink: 0;
+  color: #ffc107;
+  width: 22px;
+  height: 22px;
+}
+.llm-recommend-banner__icon svg {
+  width: 100%;
+  height: 100%;
+}
+.llm-recommend-banner__text {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.llm-recommend-banner__text strong {
+  color: #ffc107;
+}
+.llm-recommend-banner__btn {
+  flex-shrink: 0;
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.llm-recommend-banner__btn:hover {
+  background: rgba(255, 193, 7, 0.25);
+}
 
+/* ── LLM modal: custom model input ─────────────────────────────────────────── */
+.llm-model-custom {
+  font-size: 0.82rem !important;
+  opacity: 0.7;
+}
+.llm-model-custom:focus {
+  opacity: 1;
+}
+
+/* ── Ollama detected models ────────────────────────────────────────────────── */
+.ollama-detected {
+  margin: 8px 0 4px;
+}
+.ollama-detected__label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+.ollama-detected__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ollama-model-chip {
+  background: rgba(var(--accent-rgb, 99, 102, 241), 0.12);
+  border: 1px solid rgba(var(--accent-rgb, 99, 102, 241), 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  color: var(--accent, #6366f1);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ollama-model-chip:hover {
+  background: rgba(var(--accent-rgb, 99, 102, 241), 0.22);
+  border-color: rgba(var(--accent-rgb, 99, 102, 241), 0.45);
+}
+
+/* ── Advanced Settings accordion ───────────────────────────────────────────── */
+.setup-advanced {
+  margin: 12px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.setup-advanced__toggle {
+  display: block;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.setup-advanced__toggle::-webkit-details-marker { display: none; }
+.setup-advanced__toggle::before {
+  content: '▸ ';
+  font-size: 0.7rem;
+}
+.setup-advanced[open] > .setup-advanced__toggle::before {
+  content: '▾ ';
+}
+.setup-advanced__body {
+  padding: 4px 14px 14px;
+}
+.setup-param-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.setup-param-row .form-label--sm {
+  font-size: 0.76rem;
+  margin: 0;
+  flex: 1;
+  white-space: nowrap;
+}
+.setup-param-row .form-input--sm {
+  width: 100px;
+  padding: 5px 8px;
+  font-size: 0.8rem;
+  text-align: right;
+}

@@ -4,16 +4,18 @@ api/routes/llm_config.py
 REST endpoints for LLM provider configuration and status.
 
 Endpoints:
-  GET  /llm/status   — Current LLM health (safe to poll from UI)
-  GET  /llm/config   — Current config with API key masked
-  POST /llm/config   — Save a new config and test connectivity
-  POST /llm/test     — Test connectivity without saving
-  DELETE /llm/config — Reset to unconfigured state
+  GET  /llm/status        — Current LLM health (safe to poll from UI)
+  GET  /llm/config        — Current config with API key masked
+  POST /llm/config        — Save a new config and test connectivity
+  POST /llm/test          — Test connectivity without saving
+  DELETE /llm/config      — Reset to unconfigured state
+  GET  /llm/providers     — List all supported providers and their models
+  GET  /llm/ollama-models — Auto-detect locally installed Ollama models
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
@@ -23,6 +25,9 @@ from core.llm.config_store import (
     PROVIDERS,
     DEFAULT_MODELS,
     DEFAULT_OLLAMA_URL,
+    DEFAULT_LLM_PARAMS,
+    PROVIDER_MODELS,
+    PROVIDER_INFO,
     get_config_public,
     invalidate_cache,
     load_config,
@@ -38,10 +43,15 @@ router = APIRouter(prefix="/llm", tags=["llm"])
 class LLMConfigRequest(BaseModel):
     provider:          str
     model:             str
-    api_key:           str  = ""
-    azure_endpoint:    str  = ""
-    azure_api_version: str  = "2024-02-01"
-    ollama_base_url:   str  = DEFAULT_OLLAMA_URL
+    api_key:           str   = ""
+    azure_endpoint:    str   = ""
+    azure_api_version: str   = "2024-02-01"
+    ollama_base_url:   str   = DEFAULT_OLLAMA_URL
+    # Generation parameters (optional — defaults from config_store)
+    temperature:       Optional[float] = None
+    num_predict:       Optional[int]   = None
+    num_ctx:           Optional[int]   = None
+    timeout:           Optional[int]   = None
 
     @field_validator("provider")
     @classmethod
@@ -76,6 +86,10 @@ class LLMConfigResponse(BaseModel):
     ollama_base_url:   str
     configured:        bool
     default_models:    dict
+    temperature:       float
+    num_predict:       int
+    num_ctx:           int
+    timeout:           int
 
 
 class SaveConfigResponse(BaseModel):
@@ -127,6 +141,10 @@ async def save_llm_config(body: LLMConfigRequest) -> SaveConfigResponse:
         azure_api_version = body.azure_api_version,
         ollama_base_url   = body.ollama_base_url,
         configured        = False,   # will be set True inside save_config()
+        temperature       = body.temperature  if body.temperature  is not None else DEFAULT_LLM_PARAMS["temperature"],
+        num_predict       = body.num_predict   if body.num_predict   is not None else DEFAULT_LLM_PARAMS["num_predict"],
+        num_ctx           = body.num_ctx        if body.num_ctx        is not None else DEFAULT_LLM_PARAMS["num_ctx"],
+        timeout           = body.timeout        if body.timeout        is not None else DEFAULT_LLM_PARAMS["timeout"],
     )
 
     # Validate provider-specific requirements before saving.
@@ -184,6 +202,10 @@ async def test_connection(body: LLMConfigRequest) -> LLMStatusResponse:
         azure_api_version = body.azure_api_version,
         ollama_base_url   = body.ollama_base_url,
         configured        = True,
+        temperature       = body.temperature  if body.temperature  is not None else DEFAULT_LLM_PARAMS["temperature"],
+        num_predict       = body.num_predict   if body.num_predict   is not None else DEFAULT_LLM_PARAMS["num_predict"],
+        num_ctx           = body.num_ctx        if body.num_ctx        is not None else DEFAULT_LLM_PARAMS["num_ctx"],
+        timeout           = body.timeout        if body.timeout        is not None else DEFAULT_LLM_PARAMS["timeout"],
     )
     svc = get_llm_service()
     try:
@@ -217,3 +239,45 @@ async def reset_config() -> dict:
     invalidate_cache()
     _health_cache.clear()
     return {"status": "reset", "message": "LLM configuration cleared."}
+
+
+@router.get("/providers")
+async def list_providers() -> dict:
+    """
+    Return all supported providers with their display labels,
+    available model choices, and default model.
+
+    The UI uses this to populate the provider & model dropdowns.
+    """
+    return {
+        "providers": [
+            {
+                "id":           pid,
+                "label":        PROVIDER_INFO[pid]["label"],
+                "needs_key":    PROVIDER_INFO[pid]["needs_key"] == "true",
+                "default_model": DEFAULT_MODELS.get(pid, ""),
+                "models":       PROVIDER_MODELS.get(pid, []),
+            }
+            for pid in PROVIDERS
+        ],
+        "defaults": DEFAULT_MODELS,
+        "default_params": DEFAULT_LLM_PARAMS,
+    }
+
+
+@router.get("/ollama-models")
+async def list_ollama_models() -> dict:
+    """
+    Auto-detect locally installed Ollama models by querying the
+    Ollama API at the configured (or default) base URL.
+
+    Returns an empty list if Ollama is not running.
+    """
+    from core.llm.providers.ollama_provider import list_models
+
+    cfg = load_config()
+    models = list_models(cfg)
+    return {
+        "models": models,
+        "ollama_running": len(models) > 0,
+    }
