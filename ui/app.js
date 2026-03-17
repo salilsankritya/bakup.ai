@@ -69,6 +69,10 @@ const indexResultInner  = $('index-result-inner');
 const panelLoader       = $('panel-loader');
 const panelLoaderMsg    = $('panel-loader-msg');
 
+// Recent projects
+const recentProjectsEl   = $('recent-projects');
+const recentProjectsList = $('recent-projects-list');
+
 // Upload tab
 const indexUploadForm   = $('index-upload-form');
 const uProjectFiles     = $('u-project-files');
@@ -189,6 +193,21 @@ async function apiPost(path, body) {
 
 async function apiGet(path) {
   const res  = await fetch(`${API_BASE}${path}`);
+  const data = await res.json();
+  if (!res.ok) {
+    const detail = data?.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map(e => e?.msg ?? JSON.stringify(e)).join('; ')
+      : (typeof detail === 'object' && detail !== null)
+        ? JSON.stringify(detail)
+        : (detail ?? `HTTP ${res.status}`);
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function apiDelete(path) {
+  const res  = await fetch(`${API_BASE}${path}`, { method: 'DELETE' });
   const data = await res.json();
   if (!res.ok) {
     const detail = data?.detail;
@@ -704,12 +723,123 @@ function openIndexPanel() {
   indexPanel.setAttribute('aria-hidden', 'false');
   indexResult.hidden    = true;
   panelLoader.hidden    = true;
+  loadRecentProjects();
 }
 
 function closeIndexPanel() {
   panelOverlay.hidden = true;
   indexPanel.classList.remove('open');
   indexPanel.setAttribute('aria-hidden', 'true');
+}
+
+// ─── Recent projects ──────────────────────────────────────────────────────────
+const _SOURCE_ICONS = {
+  local:  '<svg class="recent-item__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5a1 1 0 011-1h4l1.5 1.5H13a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/></svg>',
+  github: '<svg class="recent-item__icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .2A8 8 0 0 0 5.47 15.79c.4.07.55-.17.55-.38v-1.33C3.83 14.5 3.35 13 3.35 13a2.04 2.04 0 0 0-.86-1.13c-.7-.48.05-.47.05-.47a1.62 1.62 0 0 1 1.18.8 1.64 1.64 0 0 0 2.24.64 1.64 1.64 0 0 1 .49-1.03c-1.72-.2-3.53-.86-3.53-3.82a3 3 0 0 1 .8-2.08 2.78 2.78 0 0 1 .08-2.05s.65-.21 2.13.8a7.35 7.35 0 0 1 3.88 0c1.48-1 2.13-.8 2.13-.8a2.78 2.78 0 0 1 .08 2.05 3 3 0 0 1 .8 2.08c0 2.97-1.81 3.62-3.54 3.81a1.84 1.84 0 0 1 .52 1.43v2.12c0 .21.15.46.55.38A8 8 0 0 0 8 .2z"/></svg>',
+  upload: '<svg class="recent-item__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V3m0 0L5.5 5.5M8 3l2.5 2.5M3 11v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>',
+};
+
+function _timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+async function loadRecentProjects() {
+  try {
+    const projects = await apiGet('/recent');
+    if (!projects || !projects.length) {
+      recentProjectsEl.hidden = true;
+      return;
+    }
+    recentProjectsList.innerHTML = '';
+    for (const p of projects) {
+      const li = document.createElement('li');
+      li.className = 'recent-item' + (p.available ? '' : ' recent-item--unavailable');
+      const icon = _SOURCE_ICONS[p.source_type] || _SOURCE_ICONS.local;
+      const meta = [
+        p.chunks_stored ? `${p.chunks_stored} chunks` : '',
+        p.last_indexed ? _timeAgo(p.last_indexed) : '',
+        p.branch ? `branch: ${p.branch}` : '',
+        !p.available ? '(path not found)' : '',
+      ].filter(Boolean).join(' · ');
+
+      li.innerHTML = `
+        ${icon}
+        <div class="recent-item__info">
+          <div class="recent-item__name" title="${_escHtml(p.project_path)}">${_escHtml(p.project_name)}</div>
+          <div class="recent-item__meta">${_escHtml(meta)}</div>
+        </div>
+        <button class="recent-item__remove" title="Remove from list">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <path d="M4 4l8 8M12 4l-8 8"/>
+          </svg>
+        </button>`;
+
+      // Click to re-index (not the remove button)
+      li.addEventListener('click', e => {
+        if (e.target.closest('.recent-item__remove')) return;
+        if (!p.available) return;
+        _selectRecentProject(p);
+      });
+
+      // Remove button
+      li.querySelector('.recent-item__remove').addEventListener('click', async e => {
+        e.stopPropagation();
+        try {
+          await apiDelete(`/recent/${encodeURIComponent(p.namespace)}`);
+          li.remove();
+          if (!recentProjectsList.children.length) recentProjectsEl.hidden = true;
+        } catch (_) { /* ignore */ }
+      });
+
+      recentProjectsList.appendChild(li);
+    }
+    recentProjectsEl.hidden = false;
+  } catch (_) {
+    recentProjectsEl.hidden = true;
+  }
+}
+
+function _selectRecentProject(p) {
+  // Switch to the right tab and pre-fill fields
+  if (p.source_type === 'github') {
+    // Activate GitHub tab
+    $$('.index-tab').forEach(t => t.classList.remove('index-tab--active'));
+    $$('.index-tab').forEach(t => { if (t.dataset.tab === 'github') t.classList.add('index-tab--active'); });
+    $('tab-local').hidden  = true;
+    $('tab-upload').hidden = true;
+    $('tab-github').hidden = false;
+    gUrl.value   = p.project_path;
+    gBranch.value = p.branch || '';
+  } else if (p.source_type === 'local') {
+    // Activate Local tab
+    $$('.index-tab').forEach(t => t.classList.remove('index-tab--active'));
+    $$('.index-tab').forEach(t => { if (t.dataset.tab === 'local') t.classList.add('index-tab--active'); });
+    $('tab-local').hidden  = false;
+    $('tab-upload').hidden = true;
+    $('tab-github').hidden = true;
+    iPath.value = p.project_path;
+  } else {
+    // Upload — activate upload tab (cannot pre-fill files)
+    $$('.index-tab').forEach(t => t.classList.remove('index-tab--active'));
+    $$('.index-tab').forEach(t => { if (t.dataset.tab === 'upload') t.classList.add('index-tab--active'); });
+    $('tab-local').hidden  = true;
+    $('tab-upload').hidden = false;
+    $('tab-github').hidden = true;
+  }
+}
+
+function _escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 openIndexBtnSide.addEventListener('click', openIndexPanel);
@@ -899,6 +1029,9 @@ function onIndexSuccess(data) {
       `✓ Indexed\nNamespace : ${data.namespace}\nChunks    : ${data.chunks_stored}`;
   }
   indexResult.hidden = false;
+
+  // Refresh the recent-projects list
+  loadRecentProjects();
 }
 
 function showIndexError(msg) {

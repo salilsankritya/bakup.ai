@@ -54,10 +54,12 @@ async def lifespan(app: FastAPI):
     # Deferred imports — only after the access check has passed.
     from core.embeddings.model_cache import ensure_models_downloaded
     from core.retrieval.vector_store import init_vector_store
+    from core.recent_projects import init as init_recent_projects
 
     print(f"bakup: starting - project path: {settings.project_path or '(none - use browser upload)'}")
     ensure_models_downloaded()
     init_vector_store()
+    init_recent_projects(settings.chroma_persist_dir)
     print("bakup: ready.")
 
     yield
@@ -113,6 +115,7 @@ from api.routes.query      import router as query_router
 from api.routes.llm_config import router as llm_router
 from api.routes.debug      import router as debug_router
 from api.routes.download   import router as download_router
+from api.routes.recent     import router as recent_router
 
 app.include_router(health_router)
 app.include_router(index_router)
@@ -120,6 +123,7 @@ app.include_router(query_router)
 app.include_router(llm_router)
 app.include_router(debug_router)
 app.include_router(download_router)
+app.include_router(recent_router)
 
 # ── Static UI (dev mode) ──────────────────────────────────────────────────────
 # Serve the UI from ../ui/ so 127.0.0.1:8000 works in development too.

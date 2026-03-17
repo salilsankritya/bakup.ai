@@ -959,6 +959,56 @@ body {
 .index-tab:hover { color: var(--text-primary); }
 .index-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
 
+/* Recent projects */
+.recent-projects { padding: 10px 16px 4px; }
+.recent-projects[hidden] { display: none; }
+.recent-projects__header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.recent-projects__title {
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-muted);
+}
+.recent-projects__list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.recent-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--r-sm);
+  background: var(--bg-secondary); cursor: pointer;
+  transition: background 0.14s;
+}
+.recent-item:hover { background: var(--bg-hover); }
+.recent-item--unavailable {
+  opacity: 0.45; cursor: not-allowed;
+}
+.recent-item__icon {
+  flex-shrink: 0; width: 16px; height: 16px;
+  color: var(--text-muted);
+}
+.recent-item__info {
+  flex: 1; min-width: 0;
+}
+.recent-item__name {
+  font-size: 0.8rem; font-weight: 500; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.recent-item__meta {
+  font-size: 0.68rem; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.recent-item__remove {
+  flex-shrink: 0; width: 18px; height: 18px;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-muted); opacity: 0; transition: opacity 0.14s, color 0.14s;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; border-radius: 3px;
+}
+.recent-item:hover .recent-item__remove { opacity: 1; }
+.recent-item__remove:hover { color: var(--red); }
+
 .index-tab-panel { padding: 16px; }
 .index-tab-panel[hidden] { display: none; }
 

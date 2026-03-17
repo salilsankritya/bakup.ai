@@ -236,7 +236,7 @@ This is the flow from the user's perspective:
 5. bakup.ai desktop app launches with a splash screen
 6. The backend server starts automatically in the background
 7. The app UI loads in the desktop window (no browser needed)
-8. User clicks "Index Project" → provides project path
+8. User clicks "Index Project" → provides project path (or picks from recent projects)
 9. User asks questions → gets structured answers
 ```
 

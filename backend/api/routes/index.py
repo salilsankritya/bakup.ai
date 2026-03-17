@@ -312,6 +312,16 @@ async def index_local(body: IndexLocalRequest) -> IndexResponse:
             ),
         )
 
+    # Record for recent-projects quick-access
+    from core.recent_projects import record_project
+    record_project(
+        project_path=resolved_path,
+        project_name=Path(resolved_path).name,
+        namespace=namespace,
+        source_type="local",
+        chunks_stored=stored,
+    )
+
     return IndexResponse(
         status="ok",
         namespace=namespace,
@@ -358,6 +368,20 @@ async def index_github(body: IndexGitHubRequest) -> IndexResponse:
                 "https://<token>@github.com/owner/repo.git"
             ),
         )
+
+    # Record for recent-projects quick-access
+    from core.recent_projects import record_project
+    # Derive a short name from the repo URL (e.g. "owner/repo")
+    _repo_name = body.repo_url.rstrip("/").rstrip(".git")
+    _repo_name = "/".join(_repo_name.split("/")[-2:])  # "owner/repo"
+    record_project(
+        project_path=body.repo_url,
+        project_name=_repo_name,
+        namespace=namespace,
+        source_type="github",
+        chunks_stored=stored,
+        branch=body.branch if body.branch != "HEAD" else None,
+    )
 
     return IndexResponse(
         status="ok",
@@ -506,6 +530,16 @@ async def index_upload(
     except Exception as exc:
         logger.error("Upload ingestion failed: %s", exc)
         raise HTTPException(status_code=500, detail="Upload ingestion failed. Check server logs for details.")
+
+    # Record for recent-projects quick-access
+    from core.recent_projects import record_project
+    record_project(
+        project_path=f"upload:{label}",
+        project_name=label,
+        namespace=ns,
+        source_type="upload",
+        chunks_stored=stored,
+    )
 
     total_files = len(proj_data) + len(log_data)
     return IndexResponse(
