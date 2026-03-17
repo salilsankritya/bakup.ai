@@ -325,8 +325,10 @@ if __name__ == "__main__":
         _config.settings = _config.load_settings()
 
     # Launch browser in background thread (uses final port)
-    browser_thread = threading.Thread(target=_open_browser, args=(settings.port,), daemon=True)
-    browser_thread.start()
+    # Skip if BAKUP_NO_BROWSER is set (e.g. when launched from Electron)
+    if not os.environ.get("BAKUP_NO_BROWSER"):
+        browser_thread = threading.Thread(target=_open_browser, args=(settings.port,), daemon=True)
+        browser_thread.start()
 
     # Run server with port-conflict retry as safety net
     max_port_retries = 5

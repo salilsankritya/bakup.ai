@@ -229,13 +229,13 @@ This is the flow from the user's perspective:
 1. Visit landing page → enter access key → download installer
 2. Run bakup-ai-installer.exe
 3. Installer creates:
-   - C:\bakup-ai\              (main application)
-   - Desktop shortcut           (bakup.ai)
-   - Start menu entry           (bakup.ai)
+   - C:\Users\<user>\AppData\Local\bakup-ai\   (main application)
+   - Desktop shortcut                            (bakup.ai)
+   - Start menu entry                            (bakup.ai)
 4. Double-click the shortcut
-5. bakup-launcher.bat starts the backend server
-6. Browser opens to http://127.0.0.1:8000
-7. User sees the bakup.ai app UI
+5. bakup.ai desktop app launches with a splash screen
+6. The backend server starts automatically in the background
+7. The app UI loads in the desktop window (no browser needed)
 8. User clicks "Index Project" → provides project path
 9. User asks questions → gets structured answers
 ```

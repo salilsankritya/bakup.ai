@@ -1,0 +1,63 @@
+{
+  "name": "bakup-ai",
+  "version": "0.2.0",
+  "description": "bakup.ai — Local-first AI incident intelligence",
+  "main": "main.js",
+  "author": "bakup.ai",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0"
+  },
+  "build": {
+    "appId": "ai.bakup.desktop",
+    "productName": "bakup.ai",
+    "copyright": "Copyright © 2026 bakup.ai",
+    "directories": {
+      "output": "../dist/electron-out"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icons/icon.ico",
+      "signtoolOptions": {
+        "sign": "./nosign.js",
+        "signingHashAlgorithms": []
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icons/icon.ico",
+      "uninstallerIcon": "icons/icon.ico",
+      "installerHeaderIcon": "icons/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "bakup.ai",
+      "artifactName": "bakup-ai-installer.exe"
+    },
+    "extraResources": [
+      {
+        "from": "../dist/bakup-server",
+        "to": "bakup-server",
+        "filter": ["**/*"]
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "splash.html",
+      "icons/**/*"
+    ]
+  }
+}

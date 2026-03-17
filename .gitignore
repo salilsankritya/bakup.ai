@@ -22,6 +22,10 @@ build/pyibuild/
 build/__pycache__/
 build-log.txt
 
+# Electron
+electron/node_modules/
+electron/dist/
+
 # OS files
 .DS_Store
 Thumbs.db
