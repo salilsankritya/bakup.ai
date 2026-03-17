@@ -11,6 +11,7 @@ import os
 import sys
 import webbrowser
 import threading
+from pathlib import Path
 
 # ── Frozen-app path setup ─────────────────────────────────────────────────────
 # When running as a PyInstaller bundle, sys._MEIPASS points to the temp
@@ -62,6 +63,9 @@ import importlib, importlib.abc, importlib.machinery, types
 _TORCH_STUB_ROOTS = frozenset({
     # GPU backends (torch.__init__ imports these unconditionally)
     "torch.cuda", "torch.xpu", "torch.mps", "torch.mtia",
+    # torch.compiler uses inspect.getsource() at import time which fails
+    # in frozen binaries — stub it out safely
+    "torch.compiler",
     # Dev/compile modules excluded by PyInstaller spec (imported
     # conditionally by transformers — safe to return NullStub)
     "torch._dynamo", "torch._inductor", "torch._export",
@@ -218,10 +222,12 @@ from config import settings
 async def lifespan(app: FastAPI):
     from core.embeddings.model_cache import ensure_models_downloaded
     from core.retrieval.vector_store import init_vector_store
+    from core.recent_projects import init as init_recent_projects
 
     print(f"bakup: starting - data dir: {DATA_DIR}")
     ensure_models_downloaded()
     init_vector_store()
+    init_recent_projects(Path(VECTORDB_DIR))
     print("bakup: ready.")
     print(f"bakup: open http://127.0.0.1:{settings.port} in your browser")
     yield
@@ -262,12 +268,16 @@ from api.routes.index      import router as index_router
 from api.routes.query      import router as query_router
 from api.routes.llm_config import router as llm_router
 from api.routes.debug      import router as debug_router
+from api.routes.download   import router as download_router
+from api.routes.recent     import router as recent_router
 
 app.include_router(health_router)
 app.include_router(index_router)
 app.include_router(query_router)
 app.include_router(llm_router)
 app.include_router(debug_router)
+app.include_router(download_router)
+app.include_router(recent_router)
 
 # ── Serve UI static files ─────────────────────────────────────────────────────
 # In frozen mode, UI files are bundled inside the executable

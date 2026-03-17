@@ -861,8 +861,27 @@ closeIndexBtn.addEventListener('click', closeIndexPanel);
 panelOverlay.addEventListener('click', closeIndexPanel);
 
 // ── Browse buttons ──────────────────────────────────────────────────
-browseFolderBtn.addEventListener('click', () => folderPicker.click());
-browseFileBtn.addEventListener('click',   () => filePicker.click());
+browseFolderBtn.addEventListener('click', async () => {
+  // Prefer Electron's native folder dialog (returns full absolute path)
+  if (window.bakupElectron && window.bakupElectron.selectFolder) {
+    const folderPath = await window.bakupElectron.selectFolder();
+    if (folderPath) iPath.value = folderPath;
+    return;
+  }
+  // Fallback: HTML file picker
+  folderPicker.click();
+});
+browseFileBtn.addEventListener('click', async () => {
+  if (window.bakupElectron && window.bakupElectron.selectFile) {
+    const filePath = await window.bakupElectron.selectFile([
+      { name: 'Log files', extensions: ['log', 'txt'] },
+      { name: 'All files', extensions: ['*'] }
+    ]);
+    if (filePath) iLog.value = filePath;
+    return;
+  }
+  filePicker.click();
+});
 
 folderPicker.addEventListener('change', e => {
   const files = e.target.files;

@@ -141,16 +141,15 @@ if (-not $SkipPyInstaller) {
         (Join-Path $internalDir "backend\.pytest_cache"),
         # chromadb test suite
         (Join-Path $internalDir "chromadb\test"),
-        # torch subsystems excluded by spec but may leak via collect_all
-        (Join-Path $internalDir "torch\testing"),
-        (Join-Path $internalDir "torch\distributed"),
+        # torch subsystems — stubbed at runtime by bakup_server.py
         (Join-Path $internalDir "torch\_inductor"),
         (Join-Path $internalDir "torch\_dynamo"),
         (Join-Path $internalDir "torch\onnx"),
         (Join-Path $internalDir "torch\_export"),
-        (Join-Path $internalDir "torch\profiler"),
         (Join-Path $internalDir "torch\package"),
         (Join-Path $internalDir "torch\compiler")
+        # NOTE: do NOT delete distributed, testing, ao, profiler
+        # — they are needed by torch.nn.parallel at import time
     )
     $removedMB = 0
     foreach ($d in $cleanupDirs) {

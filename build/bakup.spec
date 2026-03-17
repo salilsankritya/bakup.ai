@@ -68,6 +68,7 @@ hidden_imports = [
     "api.routes.llm_config",
     "api.routes.debug",
     "api.routes.download",
+    "api.routes.recent",
     "core",
     "core.access",
     "core.analysis",
@@ -89,11 +90,17 @@ hidden_imports = [
     "core.llm.config_store",
     "core.llm.llm_service",
     "core.llm.prompt_templates",
+    "core.llm.providers",
+    "core.llm.providers.ollama_provider",
+    "core.llm.providers.openai_provider",
+    "core.llm.providers.anthropic_provider",
     "core.retrieval",
     "core.retrieval.models",
     "core.retrieval.rag",
     "core.retrieval.ranker",
     "core.retrieval.vector_store",
+    "core.retrieval.agent",
+    "core.recent_projects",
     "core.net",
     "config",
 
@@ -184,8 +191,9 @@ a = Analysis(
         "_pytest",
 
         # Torch subsystems — we only need CPU inference
-        # NOTE: distributed, testing, ao, profiler, compiler MUST stay
-        # included — they are unconditionally imported by torch.__init__.
+        # These are stubbed by bakup_server.py's _TorchStubFinder at runtime.
+        # NOTE: distributed, testing, ao, profiler MUST stay included —
+        # they are used as base classes by torch.nn.parallel etc.
         "torch._inductor",
         "torch._dynamo",
         "torch.onnx",
@@ -195,6 +203,7 @@ a = Analysis(
         "torch.xpu",
         "torch.mps",
         "torch.mtia",
+        "torch.compiler",
 
         # Dev/build tools — not needed at runtime
         "setuptools",
