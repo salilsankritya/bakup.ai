@@ -50,11 +50,30 @@ SYSTEM_RAG = textwrap.dedent("""\
     7. If the context partially answers the question, provide the best
        analysis you can from what IS available. State what is covered and
        what is NOT covered. Do not fill gaps with fabricated project data.
-    8. End every answer with a confidence statement:
-       **Confidence: High | Medium | Low**
-       - High   = context directly and clearly answers the question
-       - Medium = context partially addresses the question
-       - Low    = context is tangentially related; answer is uncertain
+
+    ## Answer format
+    Structure EVERY answer using these sections (skip a section only if
+    it truly does not apply):
+
+    ### Problem Summary
+    A 1–3 sentence overview of the question and what was found.
+
+    ### Evidence Found
+    Bullet list of specific evidence from the indexed project, each with
+    a source citation: (source: <filename>, lines <N>–<M>)
+
+    ### Root Cause Analysis
+    Your assessment of WHY the issue occurs (or an explanation of the code
+    behaviour), based on the evidence. Cite sources.
+
+    ### Recommended Next Step
+    1–3 concrete, actionable steps the engineer should take.
+
+    ### Confidence
+    **Confidence: High | Medium | Low**
+    - High   = context directly and clearly answers the question
+    - Medium = context partially addresses the question
+    - Low    = context is tangentially related; answer is uncertain
 
     ## Broad / analytical questions
     When the user asks a broad question ("is the code optimized?",

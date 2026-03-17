@@ -46,19 +46,70 @@ SKIP_DIRS: frozenset = frozenset({
     ".cache",                 # generic caches (pip, etc.)
     "__pypackages__",         # PEP 582 local packages
     ".eggs",                  # setuptools build artefacts
+    # Additional noise directories
+    "out", ".output",         # common build output folders
+    ".gradle", ".maven",      # Java build caches
+    ".cargo",                 # Rust build cache
+    "vendor",                 # vendored dependencies (Go, PHP, Ruby)
+    "bower_components",       # legacy JS dependency manager
+    ".terraform",             # Terraform state
+    ".serverless",            # Serverless framework artefacts
+    ".webpack",               # Webpack cache
+    ".parcel-cache",          # Parcel bundler cache
+    "site-packages",          # Python installed packages
+    ".sass-cache",            # Sass compile cache
+    "tmp", ".tmp",            # temporary directories
 })
 
-# File extensions to always skip (binary / model weights)
+# File extensions to always skip (binary / model weights / generated artefacts)
 SKIP_EXTENSIONS: frozenset = frozenset({
+    # ML model weights
     ".bin", ".model", ".vocab", ".onnx", ".pt", ".pth",
-    ".safetensors", ".gguf", ".ggml",
-    ".pkl", ".pickle", ".npy", ".npz",
-    ".exe", ".dll", ".so", ".dylib",
-    ".zip", ".tar", ".gz", ".bz2", ".7z",
+    ".safetensors", ".gguf", ".ggml", ".h5", ".hdf5",
+    ".tflite", ".pb",
+    # Serialised data
+    ".pkl", ".pickle", ".npy", ".npz", ".parquet", ".feather",
+    # Native binaries
+    ".exe", ".dll", ".so", ".dylib", ".o", ".obj", ".a", ".lib",
+    # Archives
+    ".zip", ".tar", ".gz", ".bz2", ".7z", ".xz", ".rar",
+    # Images
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp",
-    ".mp3", ".mp4", ".wav", ".avi",
-    ".woff", ".woff2", ".ttf", ".eot",
+    ".bmp", ".tiff", ".psd",
+    # Audio / video
+    ".mp3", ".mp4", ".wav", ".avi", ".mov", ".flv", ".mkv",
+    # Fonts
+    ".woff", ".woff2", ".ttf", ".eot", ".otf",
+    # Source maps & minified bundles
+    ".map",
+    # Lock files (package managers)
+    ".lock",
+    # Database files
+    ".db", ".sqlite", ".sqlite3",
+    # Coverage / profiling artefacts
+    ".coverage", ".prof", ".trace",
+    # Compiled Python
+    ".pyc", ".pyo",
+    # Java / Kotlin bytecode
+    ".class", ".jar", ".war", ".ear",
+    # .NET
+    ".nupkg",
 })
+
+# File names to always skip (noise files that clutter retrieval)
+SKIP_FILENAMES: frozenset = frozenset({
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "Pipfile.lock", "poetry.lock", "Gemfile.lock",
+    "composer.lock", "Cargo.lock", "go.sum",
+    ".DS_Store", "Thumbs.db", "desktop.ini",
+})
+
+# File suffixes to skip (e.g. minified bundles)
+# Checked against the full filename, not just the extension.
+SKIP_SUFFIXES: tuple = (
+    ".min.js", ".min.css", ".bundle.js", ".chunk.js",
+    ".min.map", ".bundle.map",
+)
 
 # File extensions considered text/code
 TEXT_EXTENSIONS: frozenset = frozenset({
@@ -131,6 +182,15 @@ def walk_project(project_root: Path, namespace: str = "") -> Iterator[Chunk]:
 
             # Skip binary / model weight extensions
             if filepath.suffix.lower() in SKIP_EXTENSIONS:
+                continue
+
+            # Skip known noise filenames (lockfiles, OS metadata)
+            if filename in SKIP_FILENAMES:
+                continue
+
+            # Skip minified / bundled files by suffix pattern
+            fname_lower = filename.lower()
+            if any(fname_lower.endswith(sfx) for sfx in SKIP_SUFFIXES):
                 continue
 
             # Extension filter

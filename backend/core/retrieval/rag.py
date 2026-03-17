@@ -407,7 +407,21 @@ def answer_question(
           f"{len(evidence.references_found)} refs, {len(evidence.dependencies)} deps, "
           f"cross_analysis={'yes' if evidence.has_cross_analysis else 'no'} "
           f"({evidence.total_ms:.0f}ms)")
+    # ── Debug visibility: multi-query variants ────────────────────────────
+    from core.retrieval.multi_query import generate_query_variants
+    variants = generate_query_variants(question)
+    if len(variants) > 1:
+        _step("multi_query", f"Generated {len(variants)} query variant(s)",
+              variants=[v[:80] for v in variants])
+        print(f"  [bakup:debug] multi_query_variants={[v[:60] for v in variants]}")
 
+    # ── Debug visibility: evidence scores ────────────────────────────────
+    all_evidence = evidence.logs + evidence.code
+    if all_evidence:
+        top_scores = [(r.source_file, r.confidence, r.source_type) for r in all_evidence[:5]]
+        _step("evidence_scores", f"Top {len(top_scores)} evidence scores",
+              scores=[{"file": s[0], "conf": s[1], "type": s[2]} for s in top_scores])
+        print(f"  [bakup:debug] top_evidence_scores={top_scores}")
     # Log causal confidence if available
     if evidence.causal_confidence:
         cc = evidence.causal_confidence
@@ -529,6 +543,14 @@ def _generate_agentic_answer(
     # Inject session context if this is a follow-up
     if session_context:
         context_block = session_context + "\n\n" + context_block
+
+    # Debug: log final context size
+    context_chars = len(context_block)
+    estimated_tokens = context_chars // 4  # rough 4 chars ≈ 1 token estimate
+    _step("context_size", f"Context: {context_chars:,} chars (~{estimated_tokens:,} tokens)",
+          chars=context_chars, estimated_tokens=estimated_tokens)
+    print(f"  [bakup:debug] context_size={context_chars} chars, "
+          f"~{estimated_tokens} tokens")
 
     _step("generate", f"Generating answer from structured evidence "
           f"(type={plan.question_type.value}, "

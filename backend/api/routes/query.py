@@ -406,20 +406,14 @@ async def ask_stream(body: QueryRequest):
 
             yield sse_step("index_check", f"Found {count} indexed documents in project")
 
-            # ── Step 3: Embed ─────────────────────────────────────────────────
-            yield sse_step("embed", "Understanding your question...")
-            from core.embeddings.embedder import embed_query
-            query_vec = await loop.run_in_executor(None, embed_query, body.question)
-            yield sse_step("embed_done", "Query embedded")
-
-            # ── Step 4: Semantic search ───────────────────────────────────────
+            # ── Step 3: Multi-query semantic search ───────────────────────
             top_k = max(1, min(body.top_k, 20))
-            yield sse_step("retrieve", f"Searching {count} indexed documents...")
-            from core.retrieval.vector_store import query_chunks
+            yield sse_step("retrieve", f"Searching {count} indexed documents (multi-query)...")
+            from core.retrieval.multi_query import multi_query_retrieve
             raw = await loop.run_in_executor(
-                None, partial(query_chunks, query_vec, namespace=body.namespace, top_k=top_k)
+                None, partial(multi_query_retrieve, body.question, body.namespace, top_k)
             )
-            yield sse_step("retrieve_done", f"Found {len(raw)} semantic matches")
+            yield sse_step("retrieve_done", f"Found {len(raw)} semantic matches (multi-query)")
 
             # ── Step 5: Keyword search for log queries ────────────────────────
             from core.retrieval.rag import _is_log_query, _extract_search_keywords
@@ -446,16 +440,12 @@ async def ask_stream(body: QueryRequest):
                 )
                 yield sse_step("severity_done", f"Found {len(sev_chunks)} error chunks")
 
-            # ── Step 6: Merge & rank ──────────────────────────────────────────
-            yield sse_step("rank", "Ranking results by relevance...")
+            # ── Step 6: Merge & rank (with dedup) ─────────────────────────
+            yield sse_step("rank", "Ranking and deduplicating results...")
             all_chunks = raw + kw_chunks + sev_chunks
-            seen = set()
-            deduped = []
-            for c in all_chunks:
-                key = (c.source_file, c.line_start, c.line_end)
-                if key not in seen:
-                    seen.add(key)
-                    deduped.append(c)
+
+            from core.retrieval.dedup import deduplicate_chunks
+            deduped = deduplicate_chunks(all_chunks)
 
             from core.retrieval.ranker import rank_results, has_relevant_results, top_relevant
             ranked = rank_results(deduped)

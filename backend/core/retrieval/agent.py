@@ -153,20 +153,20 @@ def _execute_search_logs(
     top_k: int,
     evidence: StructuredEvidence,
 ) -> None:
-    """Search for log entries: semantic + keyword + severity."""
-    from core.embeddings.embedder import embed_query
+    """Search for log entries: multi-query + keyword + severity, with dedup."""
     from core.retrieval.vector_store import (
-        query_chunks, keyword_search, severity_search, collection_count,
+        keyword_search, severity_search, collection_count,
     )
+    from core.retrieval.multi_query import multi_query_retrieve
+    from core.retrieval.dedup import deduplicate_chunks
     from core.analysis.confidence import calculate_confidence
     from core.analysis.trends import analyze_error_trends
     from core.analysis.clusters import cluster_log_events
     from core.analysis.file_aggregation import aggregate_by_file
 
-    # Semantic search
-    query_vec = embed_query(question)
-    count = collection_count(namespace)
-    raw_chunks = query_chunks(query_vec, namespace=namespace, top_k=top_k)
+    # Multi-query semantic search (replaces single-query)
+    raw_chunks = multi_query_retrieve(question, namespace, top_k=top_k)
+    logger.info("Multi-query log search: %d chunk(s)", len(raw_chunks))
 
     # Keyword search
     search_kws = _extract_search_keywords(question)
@@ -177,15 +177,9 @@ def _execute_search_logs(
     # Severity search
     sev_chunks = severity_search(namespace, severity="error", top_k=top_k * 2)
 
-    # Merge & dedup
+    # Merge & dedup (uses new dedup module)
     all_raw = raw_chunks + kw_chunks + sev_chunks
-    seen: Set[Tuple] = set()
-    deduped = []
-    for c in all_raw:
-        key = (c.source_file, c.line_start, c.line_end)
-        if key not in seen:
-            seen.add(key)
-            deduped.append(c)
+    deduped = deduplicate_chunks(all_raw)
 
     # Rank
     ranked = rank_results(deduped)
@@ -272,13 +266,15 @@ def _execute_search_code(
     top_k: int,
     evidence: StructuredEvidence,
 ) -> None:
-    """Semantic search specifically for code chunks."""
-    from core.embeddings.embedder import embed_query
-    from core.retrieval.vector_store import query_chunks
+    """Multi-query semantic search for code chunks with dedup."""
+    from core.retrieval.multi_query import multi_query_retrieve
+    from core.retrieval.dedup import deduplicate_chunks
 
-    query_vec = embed_query(question)
-    raw_chunks = query_chunks(query_vec, namespace=namespace, top_k=top_k)
-    ranked = rank_results(raw_chunks)
+    raw_chunks = multi_query_retrieve(question, namespace, top_k=top_k)
+    deduped = deduplicate_chunks(raw_chunks)
+    ranked = rank_results(deduped)
+    logger.info("Multi-query code search: %d raw → %d deduped → %d ranked",
+                len(raw_chunks), len(deduped), len(ranked))
 
     for r in ranked:
         # Avoid duplicating chunks already found in log search
@@ -612,19 +608,48 @@ def execute_plan(
 def build_evidence_context(
     evidence: StructuredEvidence,
     max_chars: int = 1200,
+    max_total_chars: int = 12000,
 ) -> str:
     """
     Render structured evidence into a context block for the LLM prompt.
 
     Organises evidence by category so the LLM sees a coherent picture
     rather than randomly interleaved log and code fragments.
+
+    Safety limits (v2):
+      - Each chunk is truncated to max_chars.
+      - Total context is truncated to max_total_chars to prevent
+        overflowing the LLM context window.
+      - Lower-ranked chunks are dropped first when limits are hit.
     """
     sections: List[str] = []
+    total_len = 0
 
-    # Log evidence
+    def _fits(text: str) -> bool:
+        """Check if adding this text would exceed the total limit."""
+        nonlocal total_len
+        return (total_len + len(text)) <= max_total_chars
+
+    def _add_section(text: str) -> bool:
+        """Add a section if it fits, return True if added."""
+        nonlocal total_len
+        if _fits(text):
+            sections.append(text)
+            total_len += len(text)
+            return True
+        # Try truncated version
+        remaining = max_total_chars - total_len
+        if remaining > 200:
+            truncated = text[:remaining - 50] + "\n\n[...context truncated for safety]"
+            sections.append(truncated)
+            total_len += len(truncated)
+            return True
+        return False
+
+    # ── Log evidence (highest priority for incident queries) ──────────────
     if evidence.logs:
         log_parts = []
-        for i, chunk in enumerate(evidence.logs[:12], 1):
+        for i, chunk in enumerate(evidence.logs[:8], 1):
             text = chunk.text[:max_chars]
             if len(chunk.text) > max_chars:
                 text += "\n[...truncated]"
@@ -632,12 +657,13 @@ def build_evidence_context(
                 f"[L{i}] {chunk.source_file}  lines {chunk.line_start}–{chunk.line_end}"
                 f"  confidence: {chunk.confidence:.2f}\n{text}"
             )
-        sections.append("## Log Evidence\n\n" + "\n\n---\n\n".join(log_parts))
+        section = "## Log Evidence\n\n" + "\n\n---\n\n".join(log_parts)
+        _add_section(section)
 
-    # Code evidence
+    # ── Code evidence ─────────────────────────────────────────────────────
     if evidence.code:
         code_parts = []
-        for i, chunk in enumerate(evidence.code[:12], 1):
+        for i, chunk in enumerate(evidence.code[:8], 1):
             text = chunk.text[:max_chars]
             if len(chunk.text) > max_chars:
                 text += "\n[...truncated]"
@@ -648,26 +674,26 @@ def build_evidence_context(
             if chunk.class_name:
                 label += f"  class: {chunk.class_name}"
             code_parts.append(label + "\n" + text)
-        sections.append("## Code Evidence\n\n" + "\n\n---\n\n".join(code_parts))
+        section = "## Code Evidence\n\n" + "\n\n---\n\n".join(code_parts)
+        _add_section(section)
 
-    # Dependencies
+    # ── Dependencies ──────────────────────────────────────────────────────
     if evidence.dependencies:
         dep_list = "\n".join(f"- {d}" for d in evidence.dependencies[:15])
-        sections.append(f"## Dependencies\n\n{dep_list}")
+        _add_section(f"## Dependencies\n\n{dep_list}")
 
-    # Architecture summary
+    # ── Architecture summary ──────────────────────────────────────────────
     if evidence.architecture_summary:
-        # Truncate to fit context window
         arch = evidence.architecture_summary[:2500]
         if len(evidence.architecture_summary) > 2500:
             arch += "\n[...truncated]"
-        sections.append(f"## Architecture Context\n\n{arch}")
+        _add_section(f"## Architecture Context\n\n{arch}")
 
-    # Cross-analysis
+    # ── Cross-analysis ────────────────────────────────────────────────────
     if evidence.cross_analysis_context:
-        sections.append(f"## Log-to-Code Cross Analysis\n\n{evidence.cross_analysis_context}")
+        _add_section(f"## Log-to-Code Cross Analysis\n\n{evidence.cross_analysis_context}")
 
-    # Analysis summaries
+    # ── Analysis summaries ────────────────────────────────────────────────
     analysis_parts = []
     if evidence.trend_summary:
         analysis_parts.append(f"### Error Trends\n{evidence.trend_summary}")
@@ -678,9 +704,9 @@ def build_evidence_context(
     if evidence.confidence_summary:
         analysis_parts.append(f"### Confidence Assessment\n{evidence.confidence_summary}")
     if analysis_parts:
-        sections.append("## Automated Analysis\n\n" + "\n\n".join(analysis_parts))
+        _add_section("## Automated Analysis\n\n" + "\n\n".join(analysis_parts))
 
-    # References extracted from logs
+    # ── References extracted from logs ────────────────────────────────────
     if evidence.references_found:
         ref_lines = []
         for ref in evidence.references_found[:10]:
@@ -694,10 +720,18 @@ def build_evidence_context(
             if ref.get("line_number"):
                 parts.append(f"line: {ref['line_number']}")
             ref_lines.append("- " + ", ".join(parts))
-        sections.append("## Extracted Code References\n\n" + "\n".join(ref_lines))
+        _add_section("## Extracted Code References\n\n" + "\n".join(ref_lines))
 
-    # Structured reasoning input (v4 — causal confidence + cluster ranking)
+    # ── Structured reasoning ──────────────────────────────────────────────
     if evidence.structured_reasoning:
-        sections.append("## Structured Root-Cause Analysis\n\n" + evidence.structured_reasoning)
+        _add_section("## Structured Root-Cause Analysis\n\n" + evidence.structured_reasoning)
 
-    return "\n\n" + "═" * 60 + "\n\n".join(sections)
+    context = "\n\n" + "═" * 60 + "\n\n".join(sections)
+
+    # Log final context size for debug visibility
+    logger.info(
+        "Evidence context: %d section(s), %d chars (limit: %d)",
+        len(sections), len(context), max_total_chars,
+    )
+
+    return context
