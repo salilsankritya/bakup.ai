@@ -67,6 +67,11 @@ class SourceModel(BaseModel):
     confidence: float
     confidence_label: str   # "high" | "medium" | "low"
     source_type: str        # "code" | "log"
+    # Extended metadata (populated when available)
+    function_name: str = ""
+    class_name: str = ""
+    chunk_kind: str = ""    # "function" | "class" | "method" | "module" | "config_block"
+    language: str = ""
 
 
 class QueryResponse(BaseModel):
@@ -96,6 +101,10 @@ def _build_query_response(result) -> QueryResponse:
                 confidence=s.confidence,
                 confidence_label=s.confidence_label,
                 source_type=s.source_type,
+                function_name=getattr(s, "function_name", ""),
+                class_name=getattr(s, "class_name", ""),
+                chunk_kind=getattr(s, "chunk_kind", ""),
+                language=getattr(s, "language", ""),
             )
             for s in result.sources
         ],
@@ -119,6 +128,10 @@ def _response_to_dict(result) -> dict:
                 "confidence":       s.confidence,
                 "confidence_label": s.confidence_label,
                 "source_type":      s.source_type,
+                "function_name":    getattr(s, "function_name", ""),
+                "class_name":       getattr(s, "class_name", ""),
+                "chunk_kind":       getattr(s, "chunk_kind", ""),
+                "language":         getattr(s, "language", ""),
             }
             for s in result.sources
         ],
@@ -144,6 +157,10 @@ def _brain_to_query_response(brain_result) -> QueryResponse:
                 confidence=s.get("confidence", 0.0),
                 confidence_label=s.get("confidence_label", "low"),
                 source_type=s.get("source_type", "code"),
+                function_name=s.get("function_name", ""),
+                class_name=s.get("class_name", ""),
+                chunk_kind=s.get("chunk_kind", ""),
+                language=s.get("language", ""),
             ))
         else:
             sources.append(SourceModel(
@@ -154,6 +171,10 @@ def _brain_to_query_response(brain_result) -> QueryResponse:
                 confidence=s.confidence,
                 confidence_label=s.confidence_label,
                 source_type=s.source_type,
+                function_name=getattr(s, "function_name", ""),
+                class_name=getattr(s, "class_name", ""),
+                chunk_kind=getattr(s, "chunk_kind", ""),
+                language=getattr(s, "language", ""),
             ))
 
     return QueryResponse(

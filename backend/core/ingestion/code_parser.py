@@ -12,8 +12,9 @@ Uses regex-based parsing with indentation tracking — no external AST
 dependencies, so it works with any Python installation.
 
 Supported languages:
-  Python, JavaScript, TypeScript, JSX, TSX, Go, Java, JSON, and
-  config files (.yaml, .yml, .toml, .ini, .cfg, .conf, .env).
+  Python, JavaScript, TypeScript, JSX, TSX, Go, Java, C, C++, C#,
+  Rust, Kotlin, Swift, Scala, Ruby, PHP, Shell (bash/zsh/fish/ps1),
+  JSON, and config files (.yaml, .yml, .toml, .ini, .cfg, .conf, .env).
 """
 
 from __future__ import annotations
@@ -44,6 +45,26 @@ LANGUAGE_MAP: dict[str, str] = {
     ".conf":  "config",
     ".env":   "config",
     ".env.example": "config",
+    # C-family / systems languages
+    ".c":     "c",
+    ".h":     "c",
+    ".cpp":   "cpp",
+    ".hpp":   "cpp",
+    ".cc":    "cpp",
+    ".cxx":   "cpp",
+    ".cs":    "csharp",
+    ".rs":    "rust",
+    ".kt":    "kotlin",
+    ".swift": "swift",
+    ".scala": "scala",
+    # Scripting languages
+    ".rb":    "ruby",
+    ".php":   "php",
+    ".sh":    "shell",
+    ".bash":  "shell",
+    ".zsh":   "shell",
+    ".fish":  "shell",
+    ".ps1":   "shell",
     # Remaining extensions get fallback "text" language
 }
 
@@ -765,6 +786,299 @@ def parse_config(text: str, language: str = "config") -> List[CodeUnit]:
     return units
 
 
+# ── C-family parser (C, C++, C#, Rust, Kotlin, Swift, Scala) ──────────────────
+#
+# Covers languages that use braces for blocks and have function/struct/class
+# declarations recognisable by a simple regex + brace-counting approach.
+# This is intentionally broad  — it extracts *structural boundaries*, not a
+# full AST, which is good enough for chunking + retrieval.
+
+_C_FUNC = re.compile(
+    r"^[\w\s\*:&<>,\[\]~]+?\b(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:override\s*)?(?:noexcept\s*)?\{",
+    re.MULTILINE,
+)
+_C_CLASS = re.compile(
+    r"^(?:(?:public|private|protected|abstract|sealed|partial|static|final)\s+)*"
+    r"(?:class|struct|interface|enum|trait|object)\s+(\w+)",
+    re.MULTILINE,
+)
+_C_INCLUDE = re.compile(
+    r"^(?:#include\s+[<\"].+?[>\"]|using\s+.+;|import\s+.+)",
+    re.MULTILINE,
+)
+_RUST_FN = re.compile(
+    r"^(?:pub(?:\([\w:]+\))?\s+)?(?:async\s+)?fn\s+(\w+)",
+    re.MULTILINE,
+)
+_RUST_STRUCT = re.compile(
+    r"^(?:pub(?:\([\w:]+\))?\s+)?(?:struct|enum|trait|impl)\s+(\w+)",
+    re.MULTILINE,
+)
+
+
+def parse_c_family(text: str, language: str = "c") -> List[CodeUnit]:
+    """Parse C/C++/C#/Kotlin/Swift/Scala into logical units using brace matching."""
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    file_imports = [m.group().strip() for m in _C_INCLUDE.finditer(text)]
+    units: List[CodeUnit] = []
+    claimed: set[int] = set()
+
+    # Classes / structs / interfaces
+    for m in _C_CLASS.finditer(text):
+        name = m.group(1)
+        start_idx = text[:m.start()].count("\n")
+        # Only match if there's an opening brace on or near this line
+        end_idx = _find_brace_block_end(lines, start_idx)
+        if end_idx <= start_idx:
+            continue
+        block_text = "\n".join(lines[start_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="class", name=name, text=block_text,
+            start_line=start_idx + 1, end_line=end_idx + 1,
+            language=language, imports=file_imports,
+        ))
+        for i in range(start_idx, end_idx + 1):
+            claimed.add(i)
+
+    # Free functions (not inside classes already claimed)
+    func_re = _RUST_FN if language == "rust" else _C_FUNC
+    for m in func_re.finditer(text):
+        func_name = m.group(1)
+        func_idx = text[:m.start()].count("\n")
+        if func_idx in claimed:
+            continue
+        end_idx = _find_brace_block_end(lines, func_idx)
+        if end_idx < func_idx:
+            continue
+        block_text = "\n".join(lines[func_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="function", name=func_name, text=block_text,
+            start_line=func_idx + 1, end_line=end_idx + 1,
+            language=language, imports=file_imports,
+        ))
+        for i in range(func_idx, end_idx + 1):
+            claimed.add(i)
+
+    # Rust structs/enums/traits/impls
+    if language == "rust":
+        for m in _RUST_STRUCT.finditer(text):
+            name = m.group(1)
+            start_idx = text[:m.start()].count("\n")
+            if start_idx in claimed:
+                continue
+            end_idx = _find_brace_block_end(lines, start_idx)
+            if end_idx <= start_idx:
+                # Could be a unit struct without braces
+                end_idx = start_idx
+            block_text = "\n".join(lines[start_idx : end_idx + 1])
+            units.append(CodeUnit(
+                kind="class", name=name, text=block_text,
+                start_line=start_idx + 1, end_line=end_idx + 1,
+                language=language, imports=file_imports,
+            ))
+            for i in range(start_idx, end_idx + 1):
+                claimed.add(i)
+
+    # Module-level unclaimed code
+    unclaimed_lines = [i for i in range(len(lines)) if i not in claimed and lines[i].strip()]
+    if unclaimed_lines:
+        module_text = "\n".join(lines)
+        units.append(CodeUnit(
+            kind="module", name="<module>", text=module_text,
+            start_line=1, end_line=len(lines),
+            language=language, imports=file_imports,
+        ))
+
+    return units
+
+
+# ── Ruby parser ───────────────────────────────────────────────────────────────
+
+_RUBY_CLASS = re.compile(r"^[ \t]*(?:class|module)\s+(\w+)", re.MULTILINE)
+_RUBY_DEF = re.compile(r"^[ \t]*def\s+(\w+[\?\!]?)", re.MULTILINE)
+_RUBY_IMPORT = re.compile(r"^(?:require|require_relative|include|extend)\s+.+", re.MULTILINE)
+
+
+def parse_ruby(text: str, language: str = "ruby") -> List[CodeUnit]:
+    """Parse Ruby source into classes/modules and methods."""
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    file_imports = [m.group().strip() for m in _RUBY_IMPORT.finditer(text)]
+    units: List[CodeUnit] = []
+    claimed: set[int] = set()
+
+    # Classes / modules — use indentation-based end detection
+    for m in _RUBY_CLASS.finditer(text):
+        name = m.group(1)
+        start_idx = text[:m.start()].count("\n")
+        indent = len(lines[start_idx]) - len(lines[start_idx].lstrip())
+        # Find matching 'end'
+        end_idx = _find_ruby_end(lines, start_idx, indent)
+        block_text = "\n".join(lines[start_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="class", name=name, text=block_text,
+            start_line=start_idx + 1, end_line=end_idx + 1,
+            language=language, imports=file_imports,
+        ))
+        for i in range(start_idx, end_idx + 1):
+            claimed.add(i)
+
+    # Methods outside classes
+    for m in _RUBY_DEF.finditer(text):
+        func_name = m.group(1)
+        func_idx = text[:m.start()].count("\n")
+        if func_idx in claimed:
+            continue
+        indent = len(lines[func_idx]) - len(lines[func_idx].lstrip())
+        end_idx = _find_ruby_end(lines, func_idx, indent)
+        block_text = "\n".join(lines[func_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="function", name=func_name, text=block_text,
+            start_line=func_idx + 1, end_line=end_idx + 1,
+            language=language, imports=file_imports,
+        ))
+        for i in range(func_idx, end_idx + 1):
+            claimed.add(i)
+
+    # Module-level
+    unclaimed = [i for i in range(len(lines)) if i not in claimed and lines[i].strip()]
+    if unclaimed:
+        units.append(CodeUnit(
+            kind="module", name="<module>", text="\n".join(lines),
+            start_line=1, end_line=len(lines),
+            language=language, imports=file_imports,
+        ))
+
+    return units
+
+
+def _find_ruby_end(lines: List[str], start_idx: int, base_indent: int) -> int:
+    """Find the matching 'end' for a Ruby class/def/module block."""
+    depth = 1
+    for i in range(start_idx + 1, len(lines)):
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # Nested blocks increase depth
+        if stripped.startswith(("def ", "class ", "module ", "do", "if ", "unless ", "begin", "case ")):
+            depth += 1
+        elif stripped == "end":
+            depth -= 1
+            if depth == 0:
+                return i
+    return len(lines) - 1
+
+
+# ── PHP parser ────────────────────────────────────────────────────────────────
+
+_PHP_CLASS = re.compile(
+    r"^(?:(?:abstract|final)\s+)?class\s+(\w+)", re.MULTILINE
+)
+_PHP_FUNC = re.compile(
+    r"^(?:[ \t]*(?:public|private|protected|static)\s+)*function\s+(\w+)\s*\(",
+    re.MULTILINE,
+)
+_PHP_IMPORT = re.compile(
+    r"^(?:use\s+.+;|require(?:_once)?\s+.+;|include(?:_once)?\s+.+;)",
+    re.MULTILINE,
+)
+
+
+def parse_php(text: str, language: str = "php") -> List[CodeUnit]:
+    """Parse PHP source into classes and functions."""
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    file_imports = [m.group().strip() for m in _PHP_IMPORT.finditer(text)]
+    units: List[CodeUnit] = []
+    claimed: set[int] = set()
+
+    for m in _PHP_CLASS.finditer(text):
+        name = m.group(1)
+        start_idx = text[:m.start()].count("\n")
+        end_idx = _find_brace_block_end(lines, start_idx)
+        block_text = "\n".join(lines[start_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="class", name=name, text=block_text,
+            start_line=start_idx + 1, end_line=end_idx + 1,
+            language=language, imports=file_imports,
+        ))
+        for i in range(start_idx, end_idx + 1):
+            claimed.add(i)
+
+    for m in _PHP_FUNC.finditer(text):
+        func_name = m.group(1)
+        func_idx = text[:m.start()].count("\n")
+        if func_idx in claimed:
+            continue
+        end_idx = _find_brace_block_end(lines, func_idx)
+        block_text = "\n".join(lines[func_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="function", name=func_name, text=block_text,
+            start_line=func_idx + 1, end_line=end_idx + 1,
+            language=language, imports=file_imports,
+        ))
+        for i in range(func_idx, end_idx + 1):
+            claimed.add(i)
+
+    unclaimed = [i for i in range(len(lines)) if i not in claimed and lines[i].strip()]
+    if unclaimed:
+        units.append(CodeUnit(
+            kind="module", name="<module>", text="\n".join(lines),
+            start_line=1, end_line=len(lines),
+            language=language, imports=file_imports,
+        ))
+
+    return units
+
+
+# ── Shell script parser ───────────────────────────────────────────────────────
+
+_SH_FUNC = re.compile(
+    r"^(?:function\s+)?(\w+)\s*\(\s*\)\s*\{",
+    re.MULTILINE,
+)
+
+
+def parse_shell(text: str, language: str = "shell") -> List[CodeUnit]:
+    """Parse shell scripts into function blocks."""
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    units: List[CodeUnit] = []
+    claimed: set[int] = set()
+
+    for m in _SH_FUNC.finditer(text):
+        func_name = m.group(1)
+        func_idx = text[:m.start()].count("\n")
+        end_idx = _find_brace_block_end(lines, func_idx)
+        block_text = "\n".join(lines[func_idx : end_idx + 1])
+        units.append(CodeUnit(
+            kind="function", name=func_name, text=block_text,
+            start_line=func_idx + 1, end_line=end_idx + 1,
+            language=language,
+        ))
+        for i in range(func_idx, end_idx + 1):
+            claimed.add(i)
+
+    unclaimed = [i for i in range(len(lines)) if i not in claimed and lines[i].strip()]
+    if unclaimed:
+        units.append(CodeUnit(
+            kind="module", name="<module>", text="\n".join(lines),
+            start_line=1, end_line=len(lines),
+            language=language,
+        ))
+
+    return units
+
+
 # ── Dispatch: parse any file ──────────────────────────────────────────────────
 
 _PARSERS = {
@@ -779,6 +1093,17 @@ _PARSERS = {
     "yaml":        lambda t: parse_config(t, "yaml"),
     "toml":        lambda t: parse_config(t, "toml"),
     "config":      lambda t: parse_config(t, "config"),
+    # New parsers
+    "c":           lambda t: parse_c_family(t, "c"),
+    "cpp":         lambda t: parse_c_family(t, "cpp"),
+    "csharp":      lambda t: parse_c_family(t, "csharp"),
+    "rust":        lambda t: parse_c_family(t, "rust"),
+    "kotlin":      lambda t: parse_c_family(t, "kotlin"),
+    "swift":       lambda t: parse_c_family(t, "swift"),
+    "scala":       lambda t: parse_c_family(t, "scala"),
+    "ruby":        parse_ruby,
+    "php":         parse_php,
+    "shell":       parse_shell,
 }
 
 

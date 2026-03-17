@@ -210,6 +210,11 @@ class Source:
     confidence: float
     confidence_label: str   # "high" | "medium" | "low"
     source_type: str        # "code" | "log"
+    # Extended metadata
+    function_name: str = ""
+    class_name: str = ""
+    chunk_kind: str = ""    # "function" | "class" | "method" | "module" | "config_block"
+    language: str = ""
 
 
 @dataclass
@@ -756,6 +761,10 @@ def _build_sources(results: List[RankedResult]) -> List[Source]:
             confidence=r.confidence,
             confidence_label=r.confidence_label,
             source_type=r.source_type,
+            function_name=r.function_name,
+            class_name=r.class_name,
+            chunk_kind=r.chunk_kind,
+            language=r.language,
         )
         for r in results
     ]

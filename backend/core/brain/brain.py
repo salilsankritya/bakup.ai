@@ -482,6 +482,10 @@ def _fallback_pipeline(
                 "confidence": s.confidence,
                 "confidence_label": s.confidence_label,
                 "source_type": s.source_type,
+                "function_name": getattr(s, "function_name", ""),
+                "class_name": getattr(s, "class_name", ""),
+                "chunk_kind": getattr(s, "chunk_kind", ""),
+                "language": getattr(s, "language", ""),
             }
             for s in rag_result.sources
         ],
