@@ -249,12 +249,7 @@ ul, ol { list-style: none; }
   grid-template-columns: repeat(4, 1fr);
   gap: 24px;
 }
-@media (max-width: 900px) {
-  .steps { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 560px) {
-  .steps { grid-template-columns: 1fr; }
-}
+/* Steps grid — desktop: 4 cols, mobile: horizontal scroll (see bottom of file) */
 
 .step {
   background: var(--bg-card);
@@ -721,4 +716,106 @@ ul, ol { list-style: none; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Hero secondary line ─────────────────────────────────────────────────── */
+.hero__sub--secondary {
+  font-size: 0.9375rem;
+  color: var(--text-comment);
+  margin-bottom: 40px;
+  margin-top: -28px;
+}
+
+/* ── Step hint ───────────────────────────────────────────────────────────── */
+.step__hint {
+  font-size: 0.8125rem;
+  color: var(--text-comment);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+
+/* ── Mobile: horizontal scroll for grid sections ─────────────────────────── */
+@media (max-width: 560px) {
+  /* Steps row: swipe left/right */
+  .steps {
+    grid-template-columns: repeat(4, 80vw);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    gap: 16px;
+    padding-bottom: 8px;
+  }
+  .step {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+
+  /* Pillar rows: swipe left/right */
+  .trust__pillars {
+    grid-template-columns: repeat(3, 80vw);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    gap: 16px;
+    padding-bottom: 8px;
+  }
+  .pillar {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+
+  /* Capabilities (same grid class) */
+  #capabilities .trust__pillars {
+    grid-template-columns: repeat(4, 80vw);
+  }
+
+  /* Prevent hero text overflow */
+  .hero__headline {
+    font-size: clamp(1.75rem, 7vw, 2.25rem);
+  }
+  .hero__sub {
+    max-width: 100%;
+  }
+
+  /* Prevent code blocks from overflow */
+  .code-block__pre {
+    font-size: 0.75rem;
+  }
+
+  /* Nav links wrap */
+  .nav__inner {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .nav__links {
+    gap: 16px;
+  }
+
+  /* Preview grid padding */
+  .preview__gate {
+    padding: 20px;
+  }
+  .gate__input-row {
+    flex-direction: column;
+  }
+}
+
+/* ── Medium screens ──────────────────────────────────────────────────────── */
+@media (max-width: 900px) and (min-width: 561px) {
+  .steps {
+    grid-template-columns: repeat(4, 48vw);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    gap: 16px;
+    padding-bottom: 8px;
+  }
+  .step {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
 }

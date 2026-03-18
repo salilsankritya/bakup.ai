@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bakup.ai — AI Project Intelligence & Production Support</title>
-  <meta name="description" content="Bakup.ai is a local-first AI project intelligence assistant. It indexes your codebase and logs, reasons over structured evidence — correlating errors with source code, tracing dependency chains, and producing root-cause analysis with confidence scores. No data leaves your machine." />
+  <title>Bakup.ai — AI-Powered Root-Cause Analysis for Logs & Code</title>
+  <meta name="description" content="Bakup.ai is a desktop application that indexes your codebase and logs, then uses AI (Claude, GPT, or local models via Ollama) to correlate errors with source code and produce root-cause analysis with confidence scores." />
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -28,23 +28,24 @@
     <div class="container hero__inner">
       <div class="hero__content animate-fade-in">
         <h1 class="hero__headline">
-          Your AI production support engineer.<br />
-          Runs entirely on your machine.
+          Understand and fix production issues<br />
+          across logs and code.
         </h1>
         <p class="hero__sub">
-          Bakup.ai indexes your codebase and logs, then reasons over structured
-          evidence like an experienced engineer — correlating errors with source
-          code, tracing dependency chains, detecting error trends, and producing
-          root-cause analysis with confidence scores and actionable recommendations.
+          bakup.ai analyzes your logs, code, and system context to explain
+          root causes clearly — powered by Claude, GPT, or local models.
+        </p>
+        <p class="hero__sub hero__sub--secondary">
+          Works locally or with your preferred AI provider. Desktop app for Windows.
         </p>
         <div class="hero__cta">
           <a href="#preview" class="btn btn--primary">Request Developer Preview Access</a>
           <a href="#how-it-works" class="hero__scroll-link">See how it works ↓</a>
         </div>
         <ul class="trust-badges">
-          <li class="badge">Local-only</li>
-          <li class="badge">Reasons like an engineer</li>
-          <li class="badge">No data leaves your machine</li>
+          <li class="badge">Desktop app</li>
+          <li class="badge">Claude · GPT · Ollama</li>
+          <li class="badge">Your code stays on your machine</li>
         </ul>
       </div>
     </div>
@@ -59,10 +60,13 @@
           <span class="step__num">01</span>
           <h3 class="step__title">Point it at your project</h3>
           <p class="step__body">
-            Open the browser UI and provide a local path to your codebase and
-            log folder. Bakup recursively scans source files and log directories
-            in read-only mode — tagging each entry by severity. Nothing is
-            indexed remotely. Nothing leaves disk.
+            Open the desktop app and provide the full path to your project folder.
+            Bakup recursively scans source files and log directories in read-only
+            mode — tagging each entry by severity.
+          </p>
+          <p class="step__hint">
+            Tip: Copy the full folder path from File Explorer and paste it for
+            best results.
           </p>
           <div class="terminal" aria-label="UI example">
             <span class="terminal__prompt">&gt;</span>
@@ -156,8 +160,8 @@
   <section class="section section--trust" id="security">
     <div class="container">
       <h2 class="trust__headline">
-        Your code never leaves your machine.<br />
-        <span class="trust__headline--dim">That's not a setting. That's the architecture.</span>
+        Your source code stays on your machine.<br />
+        <span class="trust__headline--dim">Network calls are only made when you choose a cloud LLM.</span>
       </h2>
       <div class="trust__pillars">
         <div class="pillar">
@@ -175,11 +179,12 @@
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
           </div>
-          <h3 class="pillar__title">No network calls during analysis</h3>
+          <h3 class="pillar__title">Local models: zero network calls</h3>
           <p class="pillar__body">
-            Once installed, Bakup makes zero outbound connections when processing
-            your project. Analysis runs entirely on your hardware. Verify this
-            with a network monitor while it runs.
+            When using Ollama (local models), all indexing and analysis runs
+            entirely on your hardware with no outbound connections.
+            Cloud providers (OpenAI, Anthropic) require an API key and make
+            secure network calls only for LLM inference.
           </p>
         </div>
 
@@ -196,9 +201,8 @@
         </div>
       </div>
       <p class="trust__footnote">
-        Today, Bakup runs entirely on your machine. A managed cloud mode is on
-        the roadmap — but local-first will always remain the default.
-        The tool has no server-side dependency.
+        Indexing and retrieval always run locally. LLM inference can be local
+        (Ollama) or cloud (OpenAI / Anthropic) — you choose in settings.
       </p>
     </div>
   </section>
@@ -326,7 +330,7 @@ bakup.ai<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">3</div>
           <div class="qs__body">
-            <p class="qs__desc">Use the app UI to point Bakup at your project. It scans recursively, indexes code and log files, and tags entries by severity.</p>
+            <p class="qs__desc">Use the app UI to point Bakup at your project. Copy the full folder path from File Explorer and paste it into the path field for best results. Bakup scans recursively, indexes code and log files, and tags entries by severity.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
@@ -406,7 +410,7 @@ No browser needed — the UI loads automatically</code></pre>
           <li>Severity-aware analysis — auto-tags each log entry as <code>error</code>, <code>warning</code>, or <code>info</code> at ingestion.</li>
           <li>Multi-factor confidence scoring — weighs similarity, severity, recency, error volume, pattern consistency, and cross-file corroboration.</li>
           <li>Structured summaries with file references and line numbers.</li>
-          <li>Local-first architecture — zero outbound network calls during analysis.</li>
+          <li>Local-first architecture — zero outbound network calls when using Ollama; secure API calls only for cloud LLM providers.</li>
           <li>Docker Compose one-command startup.</li>
           <li>Browser-based UI with SSE streaming responses.</li>
         </ul>
@@ -419,11 +423,11 @@ No browser needed — the UI loads automatically</code></pre>
     <div class="container container--narrow">
       <h2 class="section__title">Privacy</h2>
       <div class="privacy__content">
-        <p><strong>No data leaves your machine.</strong> Bakup processes your codebase and logs entirely on local hardware. There are no outbound network calls during analysis, no telemetry, and no crash reporting.</p>
+        <p><strong>Your source code stays local.</strong> Bakup indexes and retrieves against your codebase entirely on your machine. No source code is uploaded to any server.</p>
+        <p><strong>LLM providers.</strong> If you configure OpenAI or Anthropic, selected evidence snippets are sent to their API for inference via secure HTTPS. If you use Ollama, everything stays on-device — no network calls at all.</p>
         <p><strong>No tracking.</strong> We do not collect information about what projects you analyze, what questions you ask, or how you use the tool. There is no analytics pipeline to receive such data.</p>
         <p><strong>Access keys</strong> are used solely to gate distribution of the developer preview. They are validated client-side via SHA-256 hashing. We do not log key usage or tie keys to analytics.</p>
         <p><strong>Read-only access.</strong> Bakup requests read permissions only. It cannot create, modify, or delete files on your filesystem.</p>
-        <p><strong>Future cloud mode.</strong> A managed cloud option is on the roadmap for team collaboration. It will operate under a separate privacy policy with explicit opt-in. Local-first will remain the default.</p>
       </div>
     </div>
   </section>
@@ -438,7 +442,7 @@ No browser needed — the UI loads automatically</code></pre>
         <a href="https://github.com/salilsankritya/bakup.ai" target="_blank" rel="noopener">GitHub</a>
         <a href="#privacy">Privacy</a>
       </nav>
-      <span class="footer__tagline">AI production support. Runs on your hardware.</span>
+      <span class="footer__tagline">Root-cause analysis across logs & code. Desktop app.</span>
     </div>
   </footer>
 
