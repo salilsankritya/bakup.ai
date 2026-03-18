@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bakup.ai — AI-Powered Root-Cause Analysis for Logs & Code</title>
+  <title>Bakup.ai | Root-Cause Analysis for Logs & Code</title>
   <meta name="description" content="Bakup.ai is a desktop application that indexes your codebase and logs, then uses AI (Claude, GPT, or local models via Ollama) to correlate errors with source code and produce root-cause analysis with confidence scores." />
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -28,16 +28,16 @@
     <div class="container hero__inner">
       <div class="hero__content animate-fade-in">
         <h1 class="hero__headline">
-          Understand and fix production issues<br />
-          across logs and code.
+          Root-cause analysis across<br />
+          your logs and code.
         </h1>
         <p class="hero__sub">
-          bakup.ai analyzes your logs, code, and system context to explain
-          root causes clearly — and retains project knowledge so context is
-          never lost. Powered by Claude, GPT, or local models.
+          bakup.ai indexes your codebase and logs, correlates errors with
+          source code, and builds persistent project knowledge that stays
+          even when your team changes.
         </p>
         <p class="hero__sub hero__sub--secondary">
-          Your project knowledge stays, even when teams change. Desktop app for Windows.
+          Supports OpenAI, Anthropic, and local models via Ollama. Desktop app for Windows.
         </p>
         <div class="hero__cta">
           <a href="#preview" class="btn btn--primary">Request Developer Preview Access</a>
@@ -64,7 +64,7 @@
           <p class="step__body">
             Open the desktop app and provide the full path to your project folder.
             Bakup recursively scans source files and log directories in read-only
-            mode — tagging each entry by severity.
+            mode, tagging each entry by severity.
           </p>
           <p class="step__hint">
             Tip: Copy the full folder path from File Explorer and paste it for
@@ -83,7 +83,7 @@
             Type a question in plain English. Bakup builds a multi-step retrieval
             plan, searches across code and logs, extracts code references from
             stack traces, resolves dependencies, and correlates errors with source
-            code — all automatically.
+            code. All automatically.
           </p>
           <div class="terminal" aria-label="UI example">
             <span class="terminal__prompt">&gt;</span>
@@ -97,12 +97,12 @@
           <p class="step__body">
             Responses include a structured analysis with error-to-code mapping,
             dependency chain tracing, trend detection, impact assessment,
-            and actionable recommendations — all citing specific files,
+            and actionable recommendations. Every reference cites specific files,
             functions, and line numbers from your own code.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">&gt;</span>
-            <span class="terminal__cmd terminal__cmd--output">auth/session.js:142 — confidence: 0.87</span>
+            <span class="terminal__cmd terminal__cmd--output">auth/session.js:142 | confidence: 0.87</span>
           </div>
         </div>
 
@@ -112,7 +112,7 @@
           <p class="step__body">
             Every response includes the answer, confidence score, source file,
             and line numbers. Copy the JSON or the UI output directly into your
-            incident timeline or runbook — sources intact.
+            incident timeline or runbook with sources intact.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">&gt;</span>
@@ -132,7 +132,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           </div>
           <h3 class="pillar__title">Agentic multi-step reasoning</h3>
-          <p class="pillar__body">Every question triggers a multi-step retrieval plan: semantic search, keyword matching, code reference extraction, dependency resolution, and log-to-code cross-analysis — all orchestrated automatically.</p>
+          <p class="pillar__body">Every question triggers a multi-step retrieval plan: semantic search, keyword matching, code reference extraction, dependency resolution, and log-to-code cross-analysis. Fully automated.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
@@ -146,14 +146,14 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
           <h3 class="pillar__title">Error clustering & trend detection</h3>
-          <p class="pillar__body">Similar errors are grouped into clusters. Time-based trend analysis detects spikes, regressions, and newly introduced failures — so you know whether errors are growing, stable, or resolved.</p>
+          <p class="pillar__body">Similar errors are grouped into clusters. Time-based trend analysis detects spikes, regressions, and newly introduced failures so you can see whether errors are growing, stable, or resolved.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           </div>
           <h3 class="pillar__title">Causal confidence scoring</h3>
-          <p class="pillar__body">Every answer includes a multi-factor confidence score weighing error frequency, stack trace quality, code match strength, dependency involvement, and time trends — so you know how much to trust the analysis.</p>
+          <p class="pillar__body">Every answer includes a multi-factor confidence score weighing error frequency, stack trace quality, code match strength, dependency involvement, and time trends. You always know how much to trust the result.</p>
         </div>
       </div>
     </div>
@@ -204,7 +204,7 @@
       </div>
       <p class="trust__footnote">
         Indexing and retrieval always run locally. LLM inference can be local
-        (Ollama) or cloud (OpenAI / Anthropic) — you choose in settings.
+        (Ollama) or cloud (OpenAI / Anthropic). You choose in settings.
       </p>
     </div>
   </section>
@@ -214,7 +214,7 @@
     <div class="container">
       <div class="preview__grid">
         <div class="preview__copy">
-          <span class="preview__label">Developer Preview — Limited Access</span>
+          <span class="preview__label">Developer Preview | Limited Access</span>
           <h2 class="preview__title">A working build.<br />An honest disclaimer.</h2>
           <p class="preview__body">
             This is a functional pre-release made available to a small group of
@@ -225,7 +225,7 @@
             root-cause reasoning, error clustering, trend detection, causal
             confidence scoring, and code quality review are all operational.
             The installation experience is minimal and the interface is sparse.
-            This is intentional — we are testing the reasoning engine, not the wrapper.
+            This is intentional. We are testing the reasoning engine, not the wrapper.
           </p>
           <ul class="preview__list">
             <li><strong>What this is:</strong> A working local binary. A real answer to the question: does this actually help during an incident?</li>
@@ -340,7 +340,7 @@ bakup.ai<span class="cursor">▌</span></code></pre>
                 <span class="code-block__dot"></span>
               </div>
               <pre class="code-block__pre"><code><span class="code-comment"># Everything runs inside the desktop app</span>
-No browser needed — the UI loads automatically</code></pre>
+No browser needed. The UI loads automatically.</code></pre>
             </div>
           </div>
         </li>
@@ -375,44 +375,44 @@ No browser needed — the UI loads automatically</code></pre>
       <h2 class="section__title">Changelog</h2>
 
       <div class="changelog__entry">
-        <h3 class="changelog__version">v0.2.1 <span class="changelog__date">— March 2026 · Security & Demo Hardening</span></h3>
+        <h3 class="changelog__version">v0.2.1 <span class="changelog__date">March 2026 · Security & Demo Hardening</span></h3>
         <ul class="changelog__list">
-          <li>Path traversal protection — filename sanitisation and directory confinement on all upload endpoints.</li>
-          <li>Debug endpoint authentication — all <code>/debug/*</code> routes require an access key header.</li>
-          <li>Namespace and input validation — regex enforcement and question length limits.</li>
-          <li>Error message redaction — server paths and stack traces are never leaked to the client.</li>
-          <li>LLM context limits — configurable caps on evidence chunks to prevent prompt overflow.</li>
-          <li>Brain debug cache bounded — LRU eviction prevents unbounded memory growth.</li>
+          <li>Path traversal protection: filename sanitisation and directory confinement on all upload endpoints.</li>
+          <li>Debug endpoint authentication: all <code>/debug/*</code> routes require an access key header.</li>
+          <li>Namespace and input validation: regex enforcement and question length limits.</li>
+          <li>Error message redaction: server paths and stack traces are never leaked to the client.</li>
+          <li>LLM context limits: configurable caps on evidence chunks to prevent prompt overflow.</li>
+          <li>Brain debug cache bounded: LRU eviction prevents unbounded memory growth.</li>
           <li>Anthropic (Claude) added to the LLM provider selector.</li>
           <li>Version bumped to 0.2.0 across health endpoint, installer, and server binary.</li>
         </ul>
       </div>
 
       <div class="changelog__entry">
-        <h3 class="changelog__version">v0.2.0 <span class="changelog__date">— March 2026 · Reasoning Engine</span></h3>
+        <h3 class="changelog__version">v0.2.0 <span class="changelog__date">March 2026 · Reasoning Engine</span></h3>
         <ul class="changelog__list">
-          <li>Agentic multi-step retrieval — classifies question type and generates a retrieval plan per query.</li>
-          <li>Unified evidence routing — all question types receive the full evidence context (logs, code, deps, architecture, cross-analysis).</li>
-          <li>Log-to-code root-cause analysis — auto-correlates stack traces with source code and traces dependency chains.</li>
-          <li>Error pattern clustering — groups similar errors by type, message, stack trace, and source location.</li>
-          <li>Time-based trend detection — detects error spikes, regressions, and newly introduced failures.</li>
-          <li>Causal confidence scoring — 5-factor weighted score: frequency, stack trace, code match, deps, trend.</li>
-          <li>Code review mode — broad analytical questions trigger a structured code quality analysis.</li>
-          <li>Response quality gate — detects truncated LLM output and auto-retries with a larger token budget.</li>
-          <li>Deep context window — 16K context, 2048 max output tokens, up to 12 log + 12 code chunks per query.</li>
-          <li>Session memory — per-project conversation context for follow-up question support.</li>
+          <li>Agentic multi-step retrieval: classifies question type and generates a retrieval plan per query.</li>
+          <li>Unified evidence routing: all question types receive the full evidence context (logs, code, deps, architecture, cross-analysis).</li>
+          <li>Log-to-code root-cause analysis: auto-correlates stack traces with source code and traces dependency chains.</li>
+          <li>Error pattern clustering: groups similar errors by type, message, stack trace, and source location.</li>
+          <li>Time-based trend detection: detects error spikes, regressions, and newly introduced failures.</li>
+          <li>Causal confidence scoring: 5-factor weighted score: frequency, stack trace, code match, deps, trend.</li>
+          <li>Code review mode: broad analytical questions trigger a structured code quality analysis.</li>
+          <li>Response quality gate: detects truncated LLM output and auto-retries with a larger token budget.</li>
+          <li>Deep context window: 16K context, 2048 max output tokens, up to 12 log + 12 code chunks per query.</li>
+          <li>Session memory: per-project conversation context for follow-up question support.</li>
         </ul>
       </div>
 
       <div class="changelog__entry">
-        <h3 class="changelog__version">v0.1.0 <span class="changelog__date">— March 2026 · Developer Preview</span></h3>
+        <h3 class="changelog__version">v0.1.0 <span class="changelog__date">March 2026 · Developer Preview</span></h3>
         <ul class="changelog__list">
-          <li>Recursive log folder ingestion — walks subdirectories, indexes <code>.log</code> and <code>.out</code> files individually.</li>
-          <li>Cross-file error aggregation — correlates errors across multiple log files and reports distribution.</li>
-          <li>Severity-aware analysis — auto-tags each log entry as <code>error</code>, <code>warning</code>, or <code>info</code> at ingestion.</li>
-          <li>Multi-factor confidence scoring — weighs similarity, severity, recency, error volume, pattern consistency, and cross-file corroboration.</li>
+          <li>Recursive log folder ingestion: walks subdirectories, indexes <code>.log</code> and <code>.out</code> files individually.</li>
+          <li>Cross-file error aggregation: correlates errors across multiple log files and reports distribution.</li>
+          <li>Severity-aware analysis: auto-tags each log entry as <code>error</code>, <code>warning</code>, or <code>info</code> at ingestion.</li>
+          <li>Multi-factor confidence scoring: weighs similarity, severity, recency, error volume, pattern consistency, and cross-file corroboration.</li>
           <li>Structured summaries with file references and line numbers.</li>
-          <li>Local-first architecture — zero outbound network calls when using Ollama; secure API calls only for cloud LLM providers.</li>
+          <li>Local-first architecture: zero outbound network calls when using Ollama. Secure API calls only for cloud LLM providers.</li>
           <li>Docker Compose one-command startup.</li>
           <li>Browser-based UI with SSE streaming responses.</li>
         </ul>
@@ -426,7 +426,7 @@ No browser needed — the UI loads automatically</code></pre>
       <h2 class="section__title">Privacy</h2>
       <div class="privacy__content">
         <p><strong>Your source code stays local.</strong> Bakup indexes and retrieves against your codebase entirely on your machine. No source code is uploaded to any server.</p>
-        <p><strong>LLM providers.</strong> If you configure OpenAI or Anthropic, selected evidence snippets are sent to their API for inference via secure HTTPS. If you use Ollama, everything stays on-device — no network calls at all.</p>
+        <p><strong>LLM providers.</strong> If you configure OpenAI or Anthropic, selected evidence snippets are sent to their API for inference via secure HTTPS. If you use Ollama, everything stays on-device with no network calls.</p>
         <p><strong>No tracking.</strong> We do not collect information about what projects you analyze, what questions you ask, or how you use the tool. There is no analytics pipeline to receive such data.</p>
         <p><strong>Access keys</strong> are used solely to gate distribution of the developer preview. They are validated client-side via SHA-256 hashing. We do not log key usage or tie keys to analytics.</p>
         <p><strong>Read-only access.</strong> Bakup requests read permissions only. It cannot create, modify, or delete files on your filesystem.</p>

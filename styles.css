@@ -412,7 +412,7 @@ ul, ol { list-style: none; }
   line-height: 1.6;
 }
 .preview__list li::before {
-  content: '—';
+  content: '·';
   position: absolute;
   left: 0;
   color: var(--border);

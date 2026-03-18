@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bakup.ai — Local Incident Intelligence</title>
+  <title>bakup.ai | Local Incident Intelligence</title>
   <!-- Fonts: system-stack with Inter fallback defined in fonts.css -->
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -161,7 +161,7 @@
         </button>
       </div>
       <div class="input-hint">
-        <span id="input-namespace-hint" class="input-hint__ns">No namespace — index a project first</span>
+        <span id="input-namespace-hint" class="input-hint__ns">No namespace. Index a project first.</span>
         <span class="input-hint__kb">Enter to send · Shift+Enter for newline</span>
       </div>
     </div>
@@ -208,7 +208,7 @@
           </button>
           <input type="file" id="folder-picker" webkitdirectory style="display:none"/>
         </div>
-        <label class="form-label" for="i-log">Log folder or file path <span class="form-optional">optional — folders are scanned recursively</span></label>
+        <label class="form-label" for="i-log">Log folder or file path <span class="form-optional">optional, folders are scanned recursively</span></label>
         <div class="path-picker">
           <input type="text" id="i-log" class="form-input" placeholder="C:\projects\my-service\logs" spellcheck="false"/>
           <button type="button" class="browse-btn" id="browse-file-btn" title="Browse for log file">
@@ -220,7 +220,7 @@
           </button>
           <input type="file" id="file-picker" accept=".log,.txt,*/*" style="display:none"/>
         </div>
-        <label class="form-label" for="i-namespace">Namespace <span class="form-optional">optional — auto-generated</span></label>
+        <label class="form-label" for="i-namespace">Namespace <span class="form-optional">optional, auto-generated</span></label>
         <input type="text" id="i-namespace" class="form-input" placeholder="auto-generated" spellcheck="false"/>
         <button type="submit" class="primary-btn" id="i-submit">Index Project</button>
       </form>
