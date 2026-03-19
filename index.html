@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bakup.ai | Root-Cause Analysis for Logs & Code</title>
+  <title>bakup.ai | Root-cause analysis across logs and code</title>
   <meta name="description" content="bakup.ai is a desktop application that analyzes your logs and code to identify root causes, correlate errors with source files, and build persistent project knowledge. Supports OpenAI, Anthropic, and local models via Ollama." />
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
@@ -28,12 +28,12 @@
     <div class="container hero__inner">
       <div class="hero__content animate-fade-in">
         <h1 class="hero__headline">
-          Understand and fix production issues<br />
-          across logs and code.
+          Fix production issues across logs and code<br />
+          with an AI that learns your system over time.
         </h1>
         <p class="hero__sub">
-          bakup.ai analyzes your logs, code, and system context to explain
-          root causes clearly and builds lasting knowledge of your project over time.
+          bakup.ai correlates errors with source files, traces root causes
+          across your stack, and builds lasting knowledge with every investigation.
         </p>
         <p class="hero__sub hero__sub--secondary">
           Your project knowledge stays, even as teams evolve.
@@ -61,9 +61,9 @@
           <span class="step__num">01</span>
           <h3 class="step__title">Point it at your project</h3>
           <p class="step__body">
-            Open the desktop app and provide the full path to your project folder.
-            Bakup recursively scans source files and log directories in read-only
-            mode, tagging each entry by severity.
+            Paste your project folder path into the app. Bakup recursively
+            scans source files and logs in read-only mode, tagging each
+            entry by severity.
           </p>
           <p class="step__hint">
             Copy the full folder path from File Explorer and paste it into the
@@ -80,10 +80,9 @@
           <span class="step__num">02</span>
           <h3 class="step__title">Ask what happened</h3>
           <p class="step__body">
-            Type a question in plain English. Bakup builds a multi-step retrieval
-            plan, searches across code and logs, extracts code references from
-            stack traces, resolves dependencies, and correlates errors with source
-            code. All automatically.
+            Type a question in plain English. Bakup searches across code and
+            logs, extracts references from stack traces, resolves dependencies,
+            and correlates errors with source code.
           </p>
           <div class="terminal" aria-label="UI example">
             <span class="terminal__prompt">&gt;</span>
@@ -101,12 +100,11 @@
 
         <div class="step">
           <span class="step__num">03</span>
-          <h3 class="step__title">Get a structured root-cause analysis</h3>
+          <h3 class="step__title">Get a structured answer with sources</h3>
           <p class="step__body">
-            Responses include a structured analysis with error-to-code mapping,
-            dependency chain tracing, trend detection, impact assessment,
-            and actionable recommendations. Every reference cites specific files,
-            functions, and line numbers from your own code.
+            Every response maps errors to source code, traces dependency chains,
+            and includes actionable fix suggestions. All references cite specific
+            files, functions, and line numbers from your codebase.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">&gt;</span>
@@ -118,9 +116,8 @@
           <span class="step__num">04</span>
           <h3 class="step__title">Copy the answer into your postmortem</h3>
           <p class="step__body">
-            Every response includes the answer, confidence score, source file,
-            and line numbers. Copy the JSON or the UI output directly into your
-            incident timeline or runbook with sources intact.
+            Each answer includes a confidence score, source files, and line
+            numbers. Copy it directly into your incident timeline or runbook.
           </p>
           <div class="terminal" aria-label="Terminal example">
             <span class="terminal__prompt">&gt;</span>
@@ -133,7 +130,7 @@
   <!-- ─── CAPABILITIES ─────────────────────────────────────────────────────── -->
   <section class="section" id="capabilities">
     <div class="container">
-      <h2 class="section__title">What it actually does</h2>
+      <h2 class="section__title">What happens under the hood</h2>
       <div class="trust__pillars">
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
@@ -160,8 +157,8 @@
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           </div>
-          <h3 class="pillar__title">Causal confidence scoring</h3>
-          <p class="pillar__body">Every answer includes a multi-factor confidence score weighing error frequency, stack trace quality, code match strength, dependency involvement, and time trends. You always know how much to trust the result.</p>
+          <h3 class="pillar__title">Confidence scoring</h3>
+          <p class="pillar__body">Every answer includes a confidence score weighing error frequency, stack trace quality, code match strength, and time trends. You always know how much to trust the result.</p>
         </div>
       </div>
     </div>
@@ -230,16 +227,15 @@
             engineers for early testing and feedback.
           </p>
           <p class="preview__body">
-            It works. Multi-step retrieval, log-to-code cross-analysis,
-            root-cause reasoning, error clustering, trend detection,
-            confidence scoring, and code quality review are all operational.
-            The installation is minimal and the interface is sparse.
-            This is intentional: we are testing the reasoning engine, not the wrapper.
+            It works. Retrieval, log-to-code analysis, root-cause reasoning,
+            error clustering, trend detection, and confidence scoring are all
+            operational. The interface is intentionally sparse: we are testing
+            the engine, not the wrapper.
           </p>
           <ul class="preview__list">
-            <li><strong>What this is:</strong> A working local binary. A real answer to the question: does this actually help during an incident?</li>
-            <li><strong>What this is not:</strong> A finished product. A stable API. A supported release. Documentation is partial. Edge cases exist.</li>
-            <li><strong>What we're asking for:</strong> Run it against a real project. Ask it a question you already know the answer to. Tell us where it was wrong.</li>
+            <li><strong>What this is:</strong> A working local binary. A real test of whether AI-powered root-cause analysis actually helps during an incident.</li>
+            <li><strong>What this is not:</strong> A finished product. Documentation is partial. Edge cases exist.</li>
+            <li><strong>What we need from you:</strong> Run it against a real project. Ask it something you already know the answer to. Tell us where it was wrong.</li>
           </ul>
         </div>
 
@@ -309,7 +305,7 @@
         <li class="qs__step">
           <div class="qs__num">1</div>
           <div class="qs__body">
-            <p class="qs__desc">Download and run the installer. It sets up the application, creates a desktop shortcut, and configures all required directories.</p>
+            <p class="qs__desc">Download and run the installer. It handles shortcuts, directories, and configuration automatically.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
@@ -325,7 +321,7 @@ bakup-ai-installer.exe<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">2</div>
           <div class="qs__body">
-            <p class="qs__desc">Launch bakup.ai from the Start menu or desktop shortcut. The desktop app opens with a splash screen while the backend starts automatically.</p>
+            <p class="qs__desc">Launch from the Start menu or desktop shortcut. The backend starts automatically.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
@@ -341,7 +337,7 @@ bakup.ai<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">3</div>
           <div class="qs__body">
-            <p class="qs__desc">Use the app UI to point Bakup at your project. Copy the full folder path from File Explorer and paste it into the path field. Selecting a folder may only capture the name and cause errors. Bakup scans recursively, indexes code and log files, and tags entries by severity.</p>
+            <p class="qs__desc">Paste your project folder path into the app. Bakup scans recursively, indexes code and log files, and tags entries by severity.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
@@ -400,12 +396,12 @@ No browser needed. The UI loads automatically.</code></pre>
       <div class="changelog__entry">
         <h3 class="changelog__version">v0.2.0 <span class="changelog__date">March 2026 · Reasoning Engine</span></h3>
         <ul class="changelog__list">
-          <li>Agentic multi-step retrieval: classifies question type and generates a retrieval plan per query.</li>
+          <li>Multi-step retrieval: classifies question type and generates a retrieval plan per query.</li>
           <li>Unified evidence routing: all question types receive the full evidence context (logs, code, deps, architecture, cross-analysis).</li>
           <li>Log-to-code root-cause analysis: auto-correlates stack traces with source code and traces dependency chains.</li>
           <li>Error pattern clustering: groups similar errors by type, message, stack trace, and source location.</li>
           <li>Time-based trend detection: detects error spikes, regressions, and newly introduced failures.</li>
-          <li>Causal confidence scoring: 5-factor weighted score: frequency, stack trace, code match, deps, trend.</li>
+          <li>Confidence scoring: 5-factor weighted score covering frequency, stack trace, code match, dependencies, and trend.</li>
           <li>Code review mode: broad analytical questions trigger a structured code quality analysis.</li>
           <li>Response quality gate: detects truncated LLM output and auto-retries with a larger token budget.</li>
           <li>Deep context window: 16K context, 2048 max output tokens, up to 12 log + 12 code chunks per query.</li>
@@ -453,7 +449,7 @@ No browser needed. The UI loads automatically.</code></pre>
         <a href="https://github.com/salilsankritya/bakup.ai" target="_blank" rel="noopener">GitHub</a>
         <a href="#privacy">Privacy</a>
       </nav>
-      <span class="footer__tagline">Root-cause analysis across logs & code. Desktop app.</span>
+      <span class="footer__tagline">Root-cause analysis that learns your system.</span>
     </div>
   </footer>
 
