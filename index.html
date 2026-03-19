@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bakup.ai | Root-Cause Analysis for Logs & Code</title>
-  <meta name="description" content="Bakup.ai is a desktop application that indexes your codebase and logs, then uses AI (Claude, GPT, or local models via Ollama) to correlate errors with source code and produce root-cause analysis with confidence scores." />
+  <meta name="description" content="bakup.ai is a desktop application that analyzes your logs and code to identify root causes, correlate errors with source files, and build persistent project knowledge. Supports OpenAI, Anthropic, and local models via Ollama." />
   <link rel="stylesheet" href="fonts.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -28,26 +28,25 @@
     <div class="container hero__inner">
       <div class="hero__content animate-fade-in">
         <h1 class="hero__headline">
-          Root-cause analysis across<br />
-          your logs and code.
+          Understand and fix production issues<br />
+          across logs and code.
         </h1>
         <p class="hero__sub">
-          bakup.ai indexes your codebase and logs, correlates errors with
-          source code, and builds persistent project knowledge that stays
-          even when your team changes.
+          bakup.ai analyzes your logs, code, and system context to explain
+          root causes clearly and builds lasting knowledge of your project over time.
         </p>
         <p class="hero__sub hero__sub--secondary">
-          Supports OpenAI, Anthropic, and local models via Ollama. Desktop app for Windows.
+          Your project knowledge stays, even as teams evolve.
         </p>
         <div class="hero__cta">
           <a href="#preview" class="btn btn--primary">Request Developer Preview Access</a>
           <a href="#how-it-works" class="hero__scroll-link">See how it works ↓</a>
         </div>
         <ul class="trust-badges">
-          <li class="badge">Desktop app</li>
-          <li class="badge">Claude · GPT · Ollama</li>
+          <li class="badge">Desktop app for Windows</li>
+          <li class="badge">OpenAI · Anthropic · Ollama</li>
           <li class="badge">Your code stays on your machine</li>
-          <li class="badge">Persistent project context</li>
+          <li class="badge">Persistent project knowledge</li>
         </ul>
       </div>
     </div>
@@ -67,8 +66,9 @@
             mode, tagging each entry by severity.
           </p>
           <p class="step__hint">
-            Tip: Copy the full folder path from File Explorer and paste it for
-            best results.
+            Copy the full folder path from File Explorer and paste it into the
+            path field. Selecting a folder directly may only capture the folder
+            name and cause indexing errors.
           </p>
           <div class="terminal" aria-label="UI example">
             <span class="terminal__prompt">&gt;</span>
@@ -87,7 +87,15 @@
           </p>
           <div class="terminal" aria-label="UI example">
             <span class="terminal__prompt">&gt;</span>
-            <span class="terminal__cmd">"What's causing the connection timeouts?"</span>
+            <span class="terminal__cmd">"Why is the payment service failing?"</span>
+            <br/>
+            <span class="terminal__cmd terminal__cmd--output">→ Logs: repeated timeout errors in payment_service</span>
+            <br/>
+            <span class="terminal__cmd terminal__cmd--output">→ Code: retry logic in payment_service.py:87</span>
+            <br/>
+            <span class="terminal__cmd terminal__cmd--output">→ Root cause: cascading retries under latency</span>
+            <br/>
+            <span class="terminal__cmd terminal__cmd--output">→ Fix: add retry limit + exponential backoff</span>
           </div>
         </div>
 
@@ -125,28 +133,28 @@
   <!-- ─── CAPABILITIES ─────────────────────────────────────────────────────── -->
   <section class="section" id="capabilities">
     <div class="container">
-      <h2 class="section__title">What the engine does</h2>
+      <h2 class="section__title">What it actually does</h2>
       <div class="trust__pillars">
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           </div>
-          <h3 class="pillar__title">Agentic multi-step reasoning</h3>
-          <p class="pillar__body">Every question triggers a multi-step retrieval plan: semantic search, keyword matching, code reference extraction, dependency resolution, and log-to-code cross-analysis. Fully automated.</p>
+          <h3 class="pillar__title">Multi-step retrieval</h3>
+          <p class="pillar__body">Each question triggers a structured retrieval plan: semantic search, keyword matching, code reference extraction, dependency resolution, and log-to-code cross-analysis.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
           </div>
-          <h3 class="pillar__title">Log-to-code root-cause analysis</h3>
-          <p class="pillar__body">Errors in logs are automatically linked to source code via stack traces and file references. The engine traces dependency chains and produces structured error-to-code mapping with fix suggestions.</p>
+          <h3 class="pillar__title">Log-to-code root-cause mapping</h3>
+          <p class="pillar__body">Errors in logs are linked to source code via stack traces and file references. Bakup traces dependency chains and produces structured error-to-code mapping with fix suggestions.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
           <h3 class="pillar__title">Error clustering & trend detection</h3>
-          <p class="pillar__body">Similar errors are grouped into clusters. Time-based trend analysis detects spikes, regressions, and newly introduced failures so you can see whether errors are growing, stable, or resolved.</p>
+          <p class="pillar__body">Similar errors are grouped into clusters. Trend analysis detects spikes, regressions, and newly introduced failures so you can see whether errors are growing, stable, or resolved.</p>
         </div>
         <div class="pillar">
           <div class="pillar__icon" aria-hidden="true">
@@ -162,8 +170,8 @@
   <section class="section section--trust" id="security">
     <div class="container">
       <h2 class="trust__headline">
-        Your source code stays on your machine.<br />
-        <span class="trust__headline--dim">Network calls are only made when you choose a cloud LLM.</span>
+        Your source code never leaves your machine.<br />
+        <span class="trust__headline--dim">Network calls happen only when you choose a cloud LLM provider.</span>
       </h2>
       <div class="trust__pillars">
         <div class="pillar">
@@ -181,12 +189,13 @@
           <div class="pillar__icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
           </div>
-          <h3 class="pillar__title">Local models: zero network calls</h3>
+          <h3 class="pillar__title">Local or cloud LLM: your choice</h3>
           <p class="pillar__body">
-            When using Ollama (local models), all indexing and analysis runs
-            entirely on your hardware with no outbound connections.
-            Cloud providers (OpenAI, Anthropic) require an API key and make
-            secure network calls only for LLM inference.
+            <strong>Ollama (local):</strong> All indexing, retrieval, and inference run
+            on your machine. Zero outbound network calls.<br/>
+            <strong>OpenAI / Anthropic (cloud):</strong> Require an API key. Only
+            selected evidence snippets are sent via HTTPS for LLM inference.
+            Source code is never uploaded.
           </p>
         </div>
 
@@ -203,8 +212,8 @@
         </div>
       </div>
       <p class="trust__footnote">
-        Indexing and retrieval always run locally. LLM inference can be local
-        (Ollama) or cloud (OpenAI / Anthropic). You choose in settings.
+        Indexing and retrieval always run locally. LLM inference runs locally
+        with Ollama or via secure API calls with OpenAI / Anthropic. Configured in settings.
       </p>
     </div>
   </section>
@@ -221,11 +230,11 @@
             engineers for early testing and feedback.
           </p>
           <p class="preview__body">
-            It works. Agentic multi-step retrieval, log-to-code cross-analysis,
-            root-cause reasoning, error clustering, trend detection, causal
+            It works. Multi-step retrieval, log-to-code cross-analysis,
+            root-cause reasoning, error clustering, trend detection,
             confidence scoring, and code quality review are all operational.
-            The installation experience is minimal and the interface is sparse.
-            This is intentional. We are testing the reasoning engine, not the wrapper.
+            The installation is minimal and the interface is sparse.
+            This is intentional: we are testing the reasoning engine, not the wrapper.
           </p>
           <ul class="preview__list">
             <li><strong>What this is:</strong> A working local binary. A real answer to the question: does this actually help during an incident?</li>
@@ -332,7 +341,7 @@ bakup.ai<span class="cursor">▌</span></code></pre>
         <li class="qs__step">
           <div class="qs__num">3</div>
           <div class="qs__body">
-            <p class="qs__desc">Use the app UI to point Bakup at your project. Copy the full folder path from File Explorer and paste it into the path field for best results. Bakup scans recursively, indexes code and log files, and tags entries by severity.</p>
+            <p class="qs__desc">Use the app UI to point Bakup at your project. Copy the full folder path from File Explorer and paste it into the path field. Selecting a folder may only capture the name and cause errors. Bakup scans recursively, indexes code and log files, and tags entries by severity.</p>
             <div class="code-block">
               <div class="code-block__bar">
                 <span class="code-block__dot"></span>
